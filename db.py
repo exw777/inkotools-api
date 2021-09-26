@@ -3,7 +3,7 @@
 
 import sqlite3
 from contextlib import contextmanager
-from sw import Switch, NETS
+from sw import Switch
 from netaddr import IPAddress as ip, EUI as mac
 
 DATABASE = 'data/switches.db'
@@ -13,6 +13,18 @@ SCHEMA = '''CREATE TABLE IF NOT EXISTS switches (
         mac integer NOT NULL UNIQUE,
         model text NOT NULL,
         location text NOT NULL)'''
+
+UPSERT = '''INSERT INTO switches (ip, mac, model, location)
+            VALUES ({ip},{mac},'{model}','{location}')
+            ON CONFLICT(ip) DO
+            UPDATE SET
+                mac=excluded.mac,
+                model=excluded.model,
+                location=excluded.location
+            WHERE
+                switches.mac != excluded.mac OR
+                switches.model != excluded.model OR
+                switches.location != excluded.location;'''
 
 
 def _row_convert(row):
@@ -38,10 +50,11 @@ def _db_init():
 
 
 def sw_list():
-    result = []
+    l = []
     with _cursor() as cur:
-        for row in cur.execute('SELECT ip from switches ORDER BY ip'):
-            result.append(str(ip(row[0])))
+        for row in cur.execute('SELECT ip from switches ORDER BY ip;'):
+            l.append(str(ip(row[0])))
+    result = {'switches': l, 'total': len(l)}
     return result
 
 
@@ -61,43 +74,24 @@ def sw_delete(sw_ip):
     return result
 
 
-def sw_upsert(sw_ip):
+def sw_add(sw_ip):
+    """Add new switch or update changes
+    Returns:
+     1 - Added or updated
+     0 - Nothing to change
+    -1 - Switch is unavailable
+    """
     try:
         sw = Switch(sw_ip)
         with _cursor() as cur:
-            r = f'''INSERT INTO switches (ip, mac, model, location) VALUES
-                    ({int(sw.ip)},{int(sw.mac)},'{sw.model}','{sw.location}')
-                    ON CONFLICT(ip) DO UPDATE SET
-                        mac=excluded.mac,
-                        model=excluded.model,
-                        location=excluded.location
-                    WHERE
-                        switches.mac != excluded.mac OR
-                        switches.model != excluded.model OR
-                        switches.location != excluded.location;
-                    '''
-            cur.execute(r)
+            query = UPSERT.format(ip=int(sw.ip),
+                                  mac=int(sw.mac),
+                                  model=sw.model,
+                                  location=sw.location)
+            cur.execute(query)
             result = cur.rowcount
-    except Exception as e:
-        result = e
-    return result
-
-
-def db_generate():
-    with _cursor() as cur:
-        cur.execute('DELETE FROM switches;')
-        for i in NETS:
-            try:
-                sw = Switch(i)
-            except Exception:
-                pass
-            else:
-                print(f'Adding {i}')
-                r = f'''INSERT INTO switches (ip, mac, model, location) VALUES
-                    ({int(sw.ip)},{int(sw.mac)},'{sw.model}','{sw.location}')
-                    '''
-                cur.execute(r)
-        result = cur.rowcount
+    except Switch.UnavailableError:
+        result = -1
     return result
 
 
@@ -105,22 +99,39 @@ _db_init()
 
 if __name__ == '__main__':
     import argparse
+    from sw import NETS, full_ip
+
+    CMD = ['generate', 'list']
+    IP_CMD = ['add', 'get', 'delete']
 
     arg_parser = argparse.ArgumentParser()
     arg_commands = arg_parser.add_subparsers(dest='command')
-    arg_commands.add_parser('generate')
-    arg_commands.add_parser('list')
-    cmd_get = arg_commands.add_parser('get')
-    cmd_get.add_argument('ip', type=str)
-    cmd_del = arg_commands.add_parser('delete')
-    cmd_del.add_argument('ip', type=str)
-    cmd_add = arg_commands.add_parser('add')
-    cmd_add.add_argument('ip', type=str)
+
+    for c in CMD:
+        arg_commands.add_parser(c)
+    for c in IP_CMD:
+        a = arg_commands.add_parser(c)
+        a.add_argument('ip', type=str)
 
     args = arg_parser.parse_args()
 
     if args.command == 'generate':
-        db_generate()
+        with _cursor() as cur:
+            print('Flushing table')
+            cur.execute('DELETE FROM switches;')
+            for i in NETS:
+                try:
+                    sw = Switch(i)
+                except Switch.UnavailableError:
+                    pass
+                else:
+                    print(f'Adding {i}')
+                    query = UPSERT.format(ip=int(sw.ip),
+                                          mac=int(sw.mac),
+                                          model=sw.model,
+                                          location=sw.location)
+                    cur.execute(query)
+        print('Done')
 
     if args.command == 'list':
         sw_list = sw_list()
@@ -128,9 +139,5 @@ if __name__ == '__main__':
             print(i)
         print(f'Total: {len(sw_list)} swithces')
 
-    if args.command == 'get':
-        print(sw_get(args.ip))
-    if args.command == 'add':
-        print(sw_upsert(args.ip))
-    if args.command == 'delete':
-        print(sw_delete(args.ip))
+    if args.command in IP_CMD:
+        print(eval(f'sw_{args.command}(full_ip(args.ip))'))
