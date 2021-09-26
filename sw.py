@@ -28,13 +28,38 @@ MODEL_COLORS = {'DXS-3600-32S': Fore.RED + Style.BRIGHT,
                 }
 
 
-def ping(ip):
-    result = icmp_ping(str(ip), count=1, timeout=1, privileged=False)
-    return result
-
-
 class Switch:
-    def __init__(self, ip):
+    """Simple switch class
+
+    Atributes:
+        ip:       IP address in netaddr.IPAddress format.
+        mac:      MAC address in netaddr.EUI format.
+        model:    Switch model.
+        location: System location.
+
+    Methods:
+        is_alive: Boolean value, whether the switch is available by icmp.
+        get_oid:  Get snmp oid value from the switch.
+        print:    Print short information about the switch.
+
+    Exceptions:
+        UnavailableError: Raises on init if the switch is unavailable.
+    """
+
+    def __init__(self, ip, check_icmp=False):
+        """Init of switch class
+
+        Arguments:
+
+        ip: Any format of IP address, supported by netaddr.
+
+        check_icmp: Boolean value (default is false). If set to true,
+                    additionally uses icmp to init check availability
+                    of the switch if arp check failed. Takes more time.
+                    For example, with batch processing of 1375 switches, 
+                    the difference between arp and icmp is 21s vs 2m-17s
+
+        """
         self.ip = netaddr.IPAddress(ip)
         if not self.ip in NETS:
             # raise ValueError(
@@ -43,12 +68,15 @@ class Switch:
         try:  # first, check availability via arp, it is faster
             self.mac = netaddr.EUI(arpreq(self.ip))
         except TypeError:  # if arpreq returns None
-            if self.is_alive():  # check availability via icmp
-                self.mac = netaddr.EUI(0)
-                print(f"WARN: can't get mac via arp, using: {self.mac}, "
-                      f"probably you are not in the same vlan with {self.ip}")
+            if check_icmp:
+                if self.is_alive():  # check availability via icmp
+                    self.mac = netaddr.EUI(0)
+                    print(f"WARN: can't get mac via arp, using: {self.mac}, "
+                          f"maybe you aren't in the same vlan with {self.ip}")
+                else:
+                    self._raise_unavailable()
             else:
-                raise Exception(f"Host {self.ip} is not available")
+                self._raise_unavailable()
         self.model = re.search('[A-Z]{1,3}-?[0-9]{1,4}[^ ]*|GEPON',
                                self.get_oid('1.3.6.1.2.1.1.1.0'))[0]
         # Add HW revision for DXS-1210-12SC
@@ -56,11 +84,20 @@ class Switch:
             self.model += '/' + self.get_oid('1.3.6.1.2.1.47.1.1.1.1.8.1')
         self.location = self.get_oid('1.3.6.1.2.1.1.6.0')
 
+    class UnavailableError(Exception):
+        """Custom exception when switch is not available"""
+        pass
+
+    def _raise_unavailable(self):
+        raise self.UnavailableError(f'Host {str(self.ip)} is not available!')
+
     def is_alive(self):
+        """Check if switch is available via icmp"""
         result = ping(self.ip).is_alive
         return result
 
     def get_oid(self, oid):
+        """Get snmp oid from switch"""
         return snmp_get(oid, hostname=str(self.ip), version=2).value
 
     def print(self):
@@ -73,6 +110,12 @@ class Switch:
               ' [' + Fore.CYAN + short_ip(self.ip) + Fore.RESET + '] ' +
               model_color + self.location + Fore.RESET + Style.RESET_ALL)
         # print(Fore.RESET + Style.DIM + str(self.mac) + Style.RESET_ALL)
+
+
+def ping(ip):
+    """Ping with one packet"""
+    result = icmp_ping(str(ip), count=1, timeout=1, privileged=False)
+    return result
 
 
 def full_ip(ip):
@@ -93,11 +136,11 @@ if __name__ == '__main__':
     argp = argparse.ArgumentParser(
         description='Show information about switch')
     argp.add_argument('ip', type=str)
+    argp.add_argument('--icmp', action='store_true')
 
     # argcmd = argp.add_subparsers(dest='command')
     # argcmd.add_parser('show')
 
     args = argp.parse_args()
-
-    sw = Switch(full_ip(args.ip))
+    sw = Switch(full_ip(args.ip), bool(args.icmp))
     sw.print()
