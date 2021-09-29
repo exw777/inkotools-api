@@ -7,6 +7,8 @@ from icmplib import ping as icmp_ping
 from colorama import Fore, Back, Style
 import netaddr
 import re
+import pexpect
+import yaml
 
 NETS = netaddr.IPSet(netaddr.IPRange('192.168.57.1', '192.168.57.249')) |\
     netaddr.IPSet(netaddr.IPRange('192.168.58.2', '192.168.58.249')) |\
@@ -26,6 +28,16 @@ MODEL_COLORS = {'DXS-3600-32S': Fore.RED + Style.BRIGHT,
                 'S5328C-EI-24S': Style.DIM,
                 'DEFAULT': Fore.GREEN,
                 }
+SECRETS_FILE = 'config/secrets.yml'
+# load secrets from file
+try:
+    with (open(SECRETS_FILE, 'r')) as f:
+        SECRETS = yaml.safe_load(f)['secrets']
+except FileNotFoundError as e:
+    print(Fore.RED + str(e) + Fore.RESET)
+    s = Fore.YELLOW + SECRETS_FILE.replace('.yml', '.sample.yml') + Fore.RESET
+    print(f"You must provide yaml file with secrets. See '{s}' for example.")
+    exit(e.errno)
 
 
 class Switch:
@@ -100,7 +112,7 @@ class Switch:
         """Get snmp oid from switch"""
         return snmp_get(oid, hostname=str(self.ip), version=2).value
 
-    def print(self):
+    def show(self):
         """Print short switch description"""
         if self.model in MODEL_COLORS:
             model_color = MODEL_COLORS[self.model]
@@ -110,6 +122,44 @@ class Switch:
               ' [' + Fore.CYAN + short_ip(self.ip) + Fore.RESET + '] ' +
               model_color + self.location + Fore.RESET + Style.RESET_ALL)
         # print(Fore.RESET + Style.DIM + str(self.mac) + Style.RESET_ALL)
+
+    def connect(self):
+        """Connect to switch via telnet"""
+
+        # set credentials
+        if re.search('DXS|3627G', self.model):
+            creds = SECRETS['admin_profile']
+        else:
+            creds = SECRETS['user_profile']
+
+        # set prompt
+        if re.search('DXS-1210-12SC/A1', self.model):
+            prompt = '>'
+        else:
+            prompt = '#'
+
+        with pexpect.spawn(f'telnet {self.ip}',
+                           timeout=10, encoding="utf-8") as tn:
+            tn.expect('ame:|in:')
+            tn.sendline(creds['login'])
+            tn.expect('ord:')
+            tn.sendline(creds['password'])
+            if tn.expect([prompt, 'ame:|in:']) == 1:
+                print(f'{Fore.RED}Wrong password!{Fore.RESET}')
+                s = Fore.YELLOW + SECRETS_FILE + Fore.RESET
+                exit(f"Verify contents of '{s}' and try again.")
+
+            self.show()
+            # set terminal title
+            term_title = f'[{short_ip(self.ip)}] {self.location}'
+            print(f'\33]0;{term_title}\a', end='', flush=True)
+            tn.interact()
+
+            print('\nConnection closed')
+
+
+def to_bytes(line):
+    return f'{line}\n'.encode('utf-8')
 
 
 def ping(ip):
@@ -131,16 +181,27 @@ def short_ip(ip):
 
 
 if __name__ == '__main__':
-    import argparse
+    from argparse import ArgumentParser
 
-    argp = argparse.ArgumentParser(
-        description='Show information about switch')
-    argp.add_argument('ip', type=str)
-    argp.add_argument('--icmp', action='store_true')
+    argp = ArgumentParser()
+    argp.add_argument('ip', type=str, help='switch ip address')
+    argp.add_argument('--icmp',
+                      help='use additional icmp checks (slower than arp)',
+                      action='store_true')
 
-    # argcmd = argp.add_subparsers(dest='command')
-    # argcmd.add_parser('show')
+    argcmd = argp.add_subparsers(dest='command')
+    argcmd.add_parser('show', help='show information about switch')
+    argcmd.add_parser('connect', help='connect via telnet')
 
     args = argp.parse_args()
-    sw = Switch(full_ip(args.ip), bool(args.icmp))
-    sw.print()
+
+    try:
+        sw = Switch(full_ip(args.ip), bool(args.icmp))
+    except Switch.UnavailableError as e:
+        exit(e)
+    else:
+        if args.command is None:
+            # argp.print_help()
+            sw.show()
+        else:
+            eval(f'sw.{args.command}()')

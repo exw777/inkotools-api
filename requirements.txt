@@ -8,4 +8,7 @@ itsdangerous==2.0.1
 Jinja2==3.0.1
 MarkupSafe==2.0.1
 netaddr==0.8.0
+pexpect==4.8.0
+ptyprocess==0.7.0
+PyYAML==5.4.1
 Werkzeug==2.0.1
