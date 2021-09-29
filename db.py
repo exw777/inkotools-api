@@ -5,6 +5,7 @@ import sqlite3
 from contextlib import contextmanager
 from sw import Switch
 from netaddr import IPAddress as ip, EUI as mac
+from pprint import pprint
 
 DATABASE = 'data/switches.db'
 
@@ -25,6 +26,11 @@ UPSERT = '''INSERT INTO switches (ip, mac, model, location)
                 switches.mac != excluded.mac OR
                 switches.model != excluded.model OR
                 switches.location != excluded.location;'''
+
+SEARCH = '''SELECT * from switches
+            WHERE model LIKE '%{word}%'
+            or location LIKE '%{word}%';
+            '''
 
 
 def _row_convert(row):
@@ -95,6 +101,17 @@ def sw_add(sw_ip):
     return result
 
 
+def sw_search(word):
+    """Search word in model or location"""
+    l = []
+    query = SEARCH.format(word=word)
+    with _cursor() as cur:
+        for row in cur.execute(query):
+            l.append(_row_convert(row))
+    result = {'result': l, 'total': len(l)}
+    return result
+
+
 _db_init()
 
 if __name__ == '__main__':
@@ -112,6 +129,8 @@ if __name__ == '__main__':
     for c in IP_CMD:
         a = arg_commands.add_parser(c)
         a.add_argument('ip', type=str)
+
+    arg_commands.add_parser('search').add_argument('word', type=str)
 
     args = arg_parser.parse_args()
 
@@ -141,3 +160,9 @@ if __name__ == '__main__':
 
     if args.command in IP_CMD:
         print(eval(f'sw_{args.command}(full_ip(args.ip))'))
+
+    if args.command == 'search':
+        s = sw_search(args.word)
+        for r in s['result']:
+            print(f'{r[0]:<15}| {r[1]} | {r[2]:<18} | {r[3]}')
+        print(f"Total: {s['total']}")
