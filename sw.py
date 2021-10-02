@@ -5,6 +5,7 @@ from easysnmp import snmp_get, snmp_set, snmp_walk
 from arpreq import arpreq
 from icmplib import ping as icmp_ping
 from colorama import Fore, Back, Style
+from contextlib import contextmanager
 import netaddr
 import re
 import pexpect
@@ -123,8 +124,9 @@ class Switch:
               model_color + self.location + Fore.RESET + Style.RESET_ALL)
         # print(Fore.RESET + Style.DIM + str(self.mac) + Style.RESET_ALL)
 
-    def connect(self):
-        """Connect to switch via telnet"""
+    @contextmanager
+    def _connection(self):
+        """Wrapper of connection to switch via telnet"""
 
         # set credentials
         if re.search('DXS|3627G', self.model):
@@ -134,32 +136,35 @@ class Switch:
 
         # set prompt
         if re.search('DXS-1210-12SC/A1', self.model):
-            prompt = '>'
+            self._prompt = '>'
         else:
-            prompt = '#'
+            self._prompt = '#'
 
-        with pexpect.spawn(f'telnet {self.ip}',
-                           timeout=10, encoding="utf-8") as tn:
-            tn.expect('ame:|in:')
-            tn.sendline(creds['login'])
-            tn.expect('ord:')
-            tn.sendline(creds['password'])
-            if tn.expect([prompt, 'ame:|in:']) == 1:
-                print(f'{Fore.RED}Wrong password!{Fore.RESET}')
-                s = Fore.YELLOW + SECRETS_FILE + Fore.RESET
-                exit(f"Verify contents of '{s}' and try again.")
+        tn = pexpect.spawn(f'telnet {self.ip}',
+                           timeout=10, encoding="utf-8")
 
+        tn.expect('ame:|in:')
+        tn.sendline(creds['login'])
+        tn.expect('ord:')
+        tn.sendline(creds['password'])
+        # asking login again - wrong password
+        if tn.expect([self._prompt, 'ame:|in:']) == 1:
+            print(f'{Fore.RED}Wrong password!{Fore.RESET}')
+            s = Fore.YELLOW + SECRETS_FILE + Fore.RESET
+            exit(f"Verify contents of '{s}' and try again.")
+        yield tn
+
+        tn.close()
+        print('\nConnection closed')
+
+    def interact(self):
+        """Interact with switch via telnet"""
+        with self._connection() as tn:
             self.show()
             # set terminal title
             term_title = f'[{short_ip(self.ip)}] {self.location}'
             print(f'\33]0;{term_title}\a', end='', flush=True)
             tn.interact()
-
-            print('\nConnection closed')
-
-
-def to_bytes(line):
-    return f'{line}\n'.encode('utf-8')
 
 
 def ping(ip):
@@ -191,7 +196,7 @@ if __name__ == '__main__':
 
     argcmd = argp.add_subparsers(dest='command')
     argcmd.add_parser('show', help='show information about switch')
-    argcmd.add_parser('connect', help='connect via telnet')
+    argcmd.add_parser('interact', help='connect via telnet')
 
     args = argp.parse_args()
 
