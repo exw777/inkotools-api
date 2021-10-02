@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 # db.py
 
+import os
 import sqlite3
 from contextlib import contextmanager
 from sw import Switch
 from netaddr import IPAddress as ip, EUI as mac
 from pprint import pprint
 
-DATABASE = 'data/switches.db'
+DATA_PATH = 'data'
+DATABASE = f'{DATA_PATH}/switches.db'
 
 SCHEMA = '''CREATE TABLE IF NOT EXISTS switches (
         ip integer PRIMARY KEY,
@@ -51,6 +53,8 @@ def _cursor():
 
 
 def _db_init():
+    if not os.path.exists(DATA_PATH):
+        os.makedirs(DATA_PATH)
     with _cursor() as cur:
         cur.execute(SCHEMA)
 
