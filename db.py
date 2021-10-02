@@ -158,9 +158,9 @@ if __name__ == '__main__':
 
     if args.command == 'list':
         sw_list = sw_list()
-        for i in sw_list:
+        for i in sw_list['switches']:
             print(i)
-        print(f'Total: {len(sw_list)} swithces')
+        print(f"Total: {sw_list['total']} swithces")
 
     if args.command in IP_CMD:
         print(eval(f'sw_{args.command}(full_ip(args.ip))'))
