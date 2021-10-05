@@ -136,26 +136,39 @@ class Switch:
 
         # set prompt
         if re.search('DXS-1210-12SC/A1', self.model):
-            self._prompt = '>'
+            prompt = '>'
         else:
-            self._prompt = '#'
+            prompt = '#'
+
+        # set endline
+        if re.search('3627G|3600|3000|3200|3028|3026|3120', self.model):
+            self._endline = '\n\r'
+        elif re.search('1210|QSW|LTP', self.model):
+            self._endline = '\r\n'
+        elif re.search('3526', self.model):
+            self._endline = '\r\n\r'
+        else:
+            self._endline = '\r\n'
 
         tn = pexpect.spawn(f'telnet {self.ip}',
-                           timeout=10, encoding="utf-8")
+                           timeout=45, encoding="utf-8")
 
         tn.expect('ame:|in:')
-        tn.sendline(creds['login'])
+        tn.send(creds['login']+'\r')
         tn.expect('ord:')
-        tn.sendline(creds['password'])
+        tn.send(creds['password']+'\r')
         # asking login again - wrong password
-        if tn.expect([self._prompt, 'ame:|in:']) == 1:
+        if tn.expect([prompt, 'ame:|in:']) == 1:
             print(f'{Fore.RED}Wrong password!{Fore.RESET}')
             s = Fore.YELLOW + SECRETS_FILE + Fore.RESET
             exit(f"Verify contents of '{s}' and try again.")
+        else:
+            # calculate full prompt-line for further usage
+            self._prompt = tn.before.split()[-1] + prompt
+            # TODO: for cisco cli conf t this is wrong!
         yield tn
 
         tn.close()
-        print('\nConnection closed')
 
     def interact(self):
         """Interact with switch via telnet"""
@@ -165,6 +178,35 @@ class Switch:
             term_title = f'[{short_ip(self.ip)}] {self.location}'
             print(f'\33]0;{term_title}\a', end='', flush=True)
             tn.interact()
+        print('\nConnection closed')
+
+    def get_command(self, cmd="sh conf cur"):
+        """Get result of command"""
+        with self._connection() as tn:
+            tn.sendline(cmd)
+
+            # skip command confirmation
+            # ONLY DLINK CLI
+            if re.search('DGS|DES', self.model):
+                tn.expect('Command:')
+            tn.expect(self._endline)
+
+            # print(f'command was:{tn.before.strip()}')
+
+            output = ''
+            while True:
+                match = tn.expect([self._prompt, 'All', 'More', 'Refresh'])
+                output += tn.before
+                if match == 0:
+                    break
+                elif match == 1:
+                    tn.send('a')
+                elif match == 2:
+                    tn.send(' ')
+                elif match == 3:
+                    tn.send('q')
+
+            print(output.strip())
 
 
 def ping(ip):
@@ -186,27 +228,36 @@ def short_ip(ip):
 
 
 if __name__ == '__main__':
-    from argparse import ArgumentParser
+    import click
 
-    argp = ArgumentParser()
-    argp.add_argument('ip', type=str, help='switch ip address')
-    argp.add_argument('--icmp',
-                      help='use additional icmp checks (slower than arp)',
-                      action='store_true')
+    @click.group()
+    @click.option('--icmp-check', is_flag=True,
+                  help='Use additional icmp check, which is slower than arp.')
+    @click.argument('ip')
+    @click.pass_context
+    def cli(ctx, ip, icmp_check):
+        try:
+            ctx.obj = Switch(full_ip(ip), icmp_check)
+        except Switch.UnavailableError as e:
+            exit(e)
 
-    argcmd = argp.add_subparsers(dest='command')
-    argcmd.add_parser('show', help='show information about switch')
-    argcmd.add_parser('interact', help='connect via telnet')
+    @cli.command()
+    @click.pass_context
+    def show(ctx):
+        """Print short switch description"""
+        ctx.obj.show()
 
-    args = argp.parse_args()
+    @cli.command()
+    @click.pass_context
+    def connect(ctx):
+        """Interact with switch via telnet"""
+        ctx.obj.interact()
 
-    try:
-        sw = Switch(full_ip(args.ip), bool(args.icmp))
-    except Switch.UnavailableError as e:
-        exit(e)
-    else:
-        if args.command is None:
-            # argp.print_help()
-            sw.show()
-        else:
-            eval(f'sw.{args.command}()')
+    @cli.command()
+    @click.pass_context
+    @click.argument('cmd')
+    def send(ctx, cmd):
+        """Send CMD to switch via telnet"""
+        ctx.obj.get_command(cmd)
+
+    cli()
