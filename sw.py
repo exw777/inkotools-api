@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # sw.py
 
-from easysnmp import snmp_get, snmp_set, snmp_walk
+from easysnmp import snmp_get
 from arpreq import arpreq
 from icmplib import ping as icmp_ping
 from colorama import Fore, Back, Style
@@ -59,50 +59,76 @@ class Switch:
         UnavailableError: Raises on init if the switch is unavailable.
     """
 
-    def __init__(self, ip, check_icmp=False):
+    def __init__(self, ip):
         """Init of switch class
 
         Arguments:
 
         ip: Any format of IP address, supported by netaddr.
-
-        check_icmp: Boolean value (default is false). If set to true,
-                    additionally uses icmp to init check availability
-                    of the switch if arp check failed. Takes more time.
-                    For example, with batch processing of 1375 switches, 
-                    the difference between arp and icmp is 21s vs 2m-17s
-
         """
+        # set ip address
         self.ip = netaddr.IPAddress(ip)
         if not self.ip in NETS:
             # raise ValueError(
             #     f'address {self.ip} is out of inkotel switches range')
             print(f'WARN: address {self.ip} is out of inkotel switches range')
-        try:  # first, check availability via arp, it is faster
-            self.mac = netaddr.EUI(arpreq(self.ip))
-        except TypeError:  # if arpreq returns None
-            if check_icmp:
-                if self.is_alive():  # check availability via icmp
-                    self.mac = netaddr.EUI(0)
-                    print(f"WARN: can't get mac via arp, using: {self.mac}, "
-                          f"maybe you aren't in the same vlan with {self.ip}")
-                else:
-                    self._raise_unavailable()
-            else:
-                self._raise_unavailable()
+
+        # check availability
+        # arpreq is faster than icmp, but only works when
+        # there is a corresponding entry in the local arp table
+        if not (arpreq(self.ip) or self.is_alive()):
+            raise self.UnavailableError(
+                f'Host {str(self.ip)} is not available!')
+
+        # set model
         self.model = re.search('[A-Z]{1,3}-?[0-9]{1,4}[^ ]*|GEPON',
                                self.get_oid('1.3.6.1.2.1.1.1.0'))[0]
-        # Add HW revision for DXS-1210-12SC
+        # add HW revision for DXS-1210-12SC
         if self.model == 'DXS-1210-12SC':
             self.model += '/' + self.get_oid('1.3.6.1.2.1.47.1.1.1.1.8.1')
+
+        # set system location
         self.location = self.get_oid('1.3.6.1.2.1.1.6.0')
+
+        # set mac address
+        # first, try via arp, second via snmp
+        try:
+            self.mac = netaddr.EUI(arpreq(self.ip))
+        except TypeError:
+            # most of dlink and qtech have special self-mac interface
+            # for DXS-1210-12SC (both A1 and A2 revisions) we use mac
+            # of the first port, which differs from the self-mac by 1
+            # HUAWEY and both models of GPON are not supported yet
+            if re.search('DXS-1210-12SC', self.model):
+                o = '1'
+            elif re.search('QSW', self.model):
+                o = '3001'
+            elif re.search('3600|3526', self.model):
+                o = '5120'
+            elif re.search('DES|DGS|DXS', self.model):
+                o = '5121'
+            else:
+                o = None
+            # easysnmp returns mac in OCTETSTR type, which is a string
+            # of characters corresponding to the bytes of the mac
+            # we need some magic to convert it to netaddr mac
+            # byte(char) -> int -> hex -> byte(str)
+            if o:
+                snmp_mac = self.get_oid(f'1.3.6.1.2.1.2.2.1.6.{o}')
+                if re.search('NOSUCH', snmp_mac):
+                    snmp_mac = None
+                else:
+                    self.mac = netaddr.EUI(
+                        ':'.join(map(lambda x: hex(ord(x))[2:], snmp_mac)))
+                    if o == '1':
+                        self.mac = netaddr.EUI((int(self.mac)-1))
+            else:
+                self.mac = netaddr.EUI(0)
+                print(f"WARN: can't get mac for {self.ip}, using: {self.mac}")
 
     class UnavailableError(Exception):
         """Custom exception when switch is not available"""
         pass
-
-    def _raise_unavailable(self):
-        raise self.UnavailableError(f'Host {str(self.ip)} is not available!')
 
     def is_alive(self):
         """Check if switch is available via icmp"""
@@ -150,6 +176,7 @@ class Switch:
         else:
             self._endline = '\r\n'
 
+        # TODO: different timeout for each model
         tn = pexpect.spawn(f'telnet {self.ip}',
                            timeout=45, encoding="utf-8")
 
@@ -231,13 +258,11 @@ if __name__ == '__main__':
     import click
 
     @click.group()
-    @click.option('--icmp-check', is_flag=True,
-                  help='Use additional icmp check, which is slower than arp.')
     @click.argument('ip')
     @click.pass_context
-    def cli(ctx, ip, icmp_check):
+    def cli(ctx, ip):
         try:
-            ctx.obj = Switch(full_ip(ip), icmp_check)
+            ctx.obj = Switch(full_ip(ip))
         except Switch.UnavailableError as e:
             exit(e)
 
