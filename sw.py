@@ -53,7 +53,9 @@ class Switch:
     Methods:
         is_alive: Boolean value, whether the switch is available by icmp.
         get_oid:  Get snmp oid value from the switch.
-        print:    Print short information about the switch.
+        show:     Print short information about the switch.
+        interact: Interact with switch via telnet.
+        send:     Send commands to switch via telnet.
 
     Exceptions:
         UnavailableError: Raises on init if the switch is unavailable.
@@ -139,16 +141,25 @@ class Switch:
         """Get snmp oid from switch"""
         return snmp_get(oid, hostname=str(self.ip), version=2).value
 
-    def show(self):
-        """Print short switch description"""
+    def show(self, full=False):
+        """Print short switch description
+
+        Arguments:
+
+        full: Boolean. If set, print additional line with mac address.
+        """
         if self.model in MODEL_COLORS:
             model_color = MODEL_COLORS[self.model]
         else:
             model_color = MODEL_COLORS['DEFAULT']
-        print(Fore.YELLOW + self.model + Fore.RESET +
-              ' [' + Fore.CYAN + short_ip(self.ip) + Fore.RESET + '] ' +
-              model_color + self.location + Fore.RESET + Style.RESET_ALL)
-        # print(Fore.RESET + Style.DIM + str(self.mac) + Style.RESET_ALL)
+        short_line = Fore.YELLOW + self.model + Fore.RESET + \
+            ' [' + Fore.CYAN + short_ip(self.ip) + Fore.RESET + '] ' + \
+            model_color + self.location + Fore.RESET + Style.RESET_ALL
+
+        full_line = short_line + '\n' + \
+            Fore.RESET + Style.DIM + str(self.mac) + Style.RESET_ALL
+
+        return short_line if not full else full_line
 
     @contextmanager
     def _connection(self):
@@ -192,7 +203,6 @@ class Switch:
         else:
             # calculate full prompt-line for further usage
             self._prompt = tn.before.split()[-1] + prompt
-            # TODO: for cisco cli conf t this is wrong!
         yield tn
 
         tn.close()
@@ -200,40 +210,65 @@ class Switch:
     def interact(self):
         """Interact with switch via telnet"""
         with self._connection() as tn:
-            self.show()
+            print(self.show())
             # set terminal title
             term_title = f'[{short_ip(self.ip)}] {self.location}'
             print(f'\33]0;{term_title}\a', end='', flush=True)
             tn.interact()
         print('\nConnection closed')
 
-    def get_command(self, cmd="sh conf cur"):
-        """Get result of command"""
+    def send(self, commands=[]):
+        """Send commands to switch
+
+        Arguments:
+
+        commands: It can be one command, list of commands, or plain text,
+                  where commands are separated by newlines or symbols ';'.
+
+        Returns: Result of running commands as plain text.
+        """
+
+        # if commands are plain text, split it, and trim extra spaces
+        if type(commands) is not list:
+            commands = map(str.strip, commands.replace('\n', ';').split(';'))
+
         with self._connection() as tn:
-            tn.sendline(cmd)
-
-            # skip command confirmation
-            # ONLY DLINK CLI
-            if re.search('DGS|DES', self.model):
-                tn.expect('Command:')
-            tn.expect(self._endline)
-
-            # print(f'command was:{tn.before.strip()}')
-
             output = ''
-            while True:
-                match = tn.expect([self._prompt, 'All', 'More', 'Refresh'])
-                output += tn.before
-                if match == 0:
-                    break
-                elif match == 1:
-                    tn.send('a')
-                elif match == 2:
-                    tn.send(' ')
-                elif match == 3:
-                    tn.send('q')
+            for cmd in commands:
+                # skip empty commands
+                if not cmd:
+                    continue
+                tn.sendline(cmd)
 
-            print(output.strip())
+                # on dlink cli skip writing to output command confirmation
+                if re.search('DGS|DES', self.model):
+                    tn.expect('Command:')
+                tn.expect(self._endline)
+
+                # regex for cisco cli configure terminal mode
+                conf_t = self._prompt[:-1]+'\([a-z0-9-/]+\)#'
+
+                # dict of expectations and key responses for them
+                # prompt - break expect loop
+                # All/More - page processing
+                # Refresh - quit from monitoring
+                page_exp = {self._prompt: 'break',
+                            conf_t: 'break',
+                            'All': 'a',
+                            'More': ' ',
+                            'Refresh': 'q'}
+
+                while True:
+                    match = tn.expect(list(page_exp.keys()))
+                    output += tn.before
+                    send_key = list(page_exp.values())[match]
+                    if send_key == 'break':
+                        break
+                    else:
+                        tn.send(send_key)
+
+            # return result of commands
+            return output.strip()
 
 
 def ping(ip):
@@ -268,9 +303,10 @@ if __name__ == '__main__':
 
     @cli.command()
     @click.pass_context
-    def show(ctx):
+    @click.option('--full', is_flag=True, help='Show additional info.')
+    def show(ctx, full):
         """Print short switch description"""
-        ctx.obj.show()
+        print(ctx.obj.show(full=full))
 
     @cli.command()
     @click.pass_context
@@ -283,6 +319,6 @@ if __name__ == '__main__':
     @click.argument('cmd')
     def send(ctx, cmd):
         """Send CMD to switch via telnet"""
-        ctx.obj.get_command(cmd)
+        print(ctx.obj.send(cmd))
 
     cli()
