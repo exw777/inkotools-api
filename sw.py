@@ -8,7 +8,13 @@ from colorama import Fore, Back, Style
 import netaddr
 import re
 import pexpect
-import yaml
+import logging
+import logging.config
+
+import config
+
+log = logging.getLogger()
+logging.config.dictConfig(config.LOGGER)
 
 NETS = netaddr.IPSet(netaddr.IPRange('192.168.57.1', '192.168.57.249')) |\
     netaddr.IPSet(netaddr.IPRange('192.168.58.2', '192.168.58.249')) |\
@@ -28,16 +34,6 @@ MODEL_COLORS = {'DXS-3600-32S': Fore.RED + Style.BRIGHT,
                 'S5328C-EI-24S': Style.DIM,
                 'DEFAULT': Fore.GREEN,
                 }
-SECRETS_FILE = 'config/secrets.yml'
-# load secrets from file
-try:
-    with (open(SECRETS_FILE, 'r')) as f:
-        SECRETS = yaml.safe_load(f)['secrets']
-except FileNotFoundError as e:
-    print(Fore.RED + str(e) + Fore.RESET)
-    s = Fore.YELLOW + SECRETS_FILE.replace('.yml', '.sample.yml') + Fore.RESET
-    print(f"You must provide yaml file with secrets. See '{s}' for example.")
-    exit(e.errno)
 
 
 class Switch:
@@ -72,7 +68,7 @@ class Switch:
         if not self.ip in NETS:
             # raise ValueError(
             #     f'address {self.ip} is out of inkotel switches range')
-            print(f'WARN: address {self.ip} is out of inkotel switches range')
+            log.warning(f'Address {self.ip} is out of inkotel switches range')
 
         # check availability
         # arpreq is faster than icmp, but only works when
@@ -125,7 +121,7 @@ class Switch:
                         self.mac = netaddr.EUI((int(self.mac)-1))
             else:
                 self.mac = netaddr.EUI(0)
-                print(f"WARN: can't get mac for {self.ip}, using: {self.mac}")
+                log.warning(f"Can't get mac for {self.ip}, using: {self.mac}")
 
     class UnavailableError(Exception):
         """Custom exception when switch is not available"""
@@ -167,9 +163,9 @@ class Switch:
         if not hasattr(self, '_connection') or not self._connection.isalive():
             # set credentials
             if re.search('DXS|3627G', self.model):
-                creds = SECRETS['admin_profile']
+                creds = config.SECRETS['admin_profile']
             else:
-                creds = SECRETS['user_profile']
+                creds = config.SECRETS['user_profile']
 
             # set prompt
             if re.search('DXS-1210-12SC/A1', self.model):
@@ -197,24 +193,23 @@ class Switch:
             tn.send(creds['password']+'\r')
             # asking login again - wrong password
             if tn.expect([prompt, 'ame:|in:']) == 1:
-                print(f'{Fore.RED}Wrong password!{Fore.RESET}')
-                s = Fore.YELLOW + SECRETS_FILE + Fore.RESET
-                exit(f"Verify contents of '{s}' and try again.")
+                log.critical('Wrong password!')
+                exit(f"Verify contents of 'secrets.yml' and try again.")
             else:
                 # calculate full prompt-line for further usage
                 self._prompt = tn.before.split()[-1] + prompt
 
             self._connection = tn
-        #     print('connected')
-        # else:
-        #     print('already connected')
+            log.debug('connected')
+        else:
+            log.debug('already connected')
         return self._connection
 
     def _close_telnet(self):
         """Close telnet connection"""
         if hasattr(self, '_connection'):
             self._connection.close()
-            # print('disconnected')
+            log.debug('disconnected')
 
     def interact(self):
         """Interact with switch via telnet"""

@@ -1,0 +1,23 @@
+---
+# Default config file for logger
+# Copy this file to 'logger.yml'
+version: 1
+formatters:
+  colorlog:
+    (): 'colorlog.ColoredFormatter'
+    format: '%(log_color)s%(levelname)s: %(reset)s%(message)s'
+    log_colors:
+      DEBUG: cyan
+      INFO: green
+      WARNING: yellow
+      ERROR: red
+      CRITICAL: light_red
+handlers:
+  colour:
+    class: logging.StreamHandler
+    formatter: colorlog
+loggers:
+  '':
+    level: WARNING
+    handlers: [colour]
+...
