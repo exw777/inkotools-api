@@ -5,7 +5,6 @@ from easysnmp import snmp_get
 from arpreq import arpreq
 from icmplib import ping as icmp_ping
 from colorama import Fore, Back, Style
-from contextlib import contextmanager
 import netaddr
 import re
 import pexpect
@@ -161,60 +160,70 @@ class Switch:
 
         return short_line if not full else full_line
 
-    @contextmanager
-    def _connection(self):
-        """Wrapper of connection to switch via telnet"""
+    def _telnet(self):
+        """Connect via telnet and keep connection in returned object"""
 
-        # set credentials
-        if re.search('DXS|3627G', self.model):
-            creds = SECRETS['admin_profile']
-        else:
-            creds = SECRETS['user_profile']
+        # check that connection is not established
+        if not hasattr(self, '_connection') or not self._connection.isalive():
+            # set credentials
+            if re.search('DXS|3627G', self.model):
+                creds = SECRETS['admin_profile']
+            else:
+                creds = SECRETS['user_profile']
 
-        # set prompt
-        if re.search('DXS-1210-12SC/A1', self.model):
-            prompt = '>'
-        else:
-            prompt = '#'
+            # set prompt
+            if re.search('DXS-1210-12SC/A1', self.model):
+                prompt = '>'
+            else:
+                prompt = '#'
 
-        # set endline
-        if re.search('3627G|3600|3000|3200|3028|3026|3120', self.model):
-            self._endline = '\n\r'
-        elif re.search('1210|QSW|LTP', self.model):
-            self._endline = '\r\n'
-        elif re.search('3526', self.model):
-            self._endline = '\r\n\r'
-        else:
-            self._endline = '\r\n'
+            # set endline
+            if re.search('3627G|3600|3000|3200|3028|3026|3120', self.model):
+                self._endline = '\n\r'
+            elif re.search('1210|QSW|LTP', self.model):
+                self._endline = '\r\n'
+            elif re.search('3526', self.model):
+                self._endline = '\r\n\r'
+            else:
+                self._endline = '\r\n'
 
-        # TODO: different timeout for each model
-        tn = pexpect.spawn(f'telnet {self.ip}',
-                           timeout=45, encoding="utf-8")
+            # TODO: different timeout for each model
+            tn = pexpect.spawn(f'telnet {self.ip}',
+                               timeout=45, encoding="utf-8")
 
-        tn.expect('ame:|in:')
-        tn.send(creds['login']+'\r')
-        tn.expect('ord:')
-        tn.send(creds['password']+'\r')
-        # asking login again - wrong password
-        if tn.expect([prompt, 'ame:|in:']) == 1:
-            print(f'{Fore.RED}Wrong password!{Fore.RESET}')
-            s = Fore.YELLOW + SECRETS_FILE + Fore.RESET
-            exit(f"Verify contents of '{s}' and try again.")
-        else:
-            # calculate full prompt-line for further usage
-            self._prompt = tn.before.split()[-1] + prompt
-        yield tn
+            tn.expect('ame:|in:')
+            tn.send(creds['login']+'\r')
+            tn.expect('ord:')
+            tn.send(creds['password']+'\r')
+            # asking login again - wrong password
+            if tn.expect([prompt, 'ame:|in:']) == 1:
+                print(f'{Fore.RED}Wrong password!{Fore.RESET}')
+                s = Fore.YELLOW + SECRETS_FILE + Fore.RESET
+                exit(f"Verify contents of '{s}' and try again.")
+            else:
+                # calculate full prompt-line for further usage
+                self._prompt = tn.before.split()[-1] + prompt
 
-        tn.close()
+            self._connection = tn
+        #     print('connected')
+        # else:
+        #     print('already connected')
+        return self._connection
+
+    def _close_telnet(self):
+        """Close telnet connection"""
+        if hasattr(self, '_connection'):
+            self._connection.close()
+            # print('disconnected')
 
     def interact(self):
         """Interact with switch via telnet"""
-        with self._connection() as tn:
-            print(self.show())
-            # set terminal title
-            term_title = f'[{short_ip(self.ip)}] {self.location}'
-            print(f'\33]0;{term_title}\a', end='', flush=True)
-            tn.interact()
+        tn = self._telnet()
+        print(self.show())
+        # set terminal title
+        term_title = f'[{short_ip(self.ip)}] {self.location}'
+        print(f'\33]0;{term_title}\a', end='', flush=True)
+        tn.interact()
         print('\nConnection closed')
 
     def send(self, commands=[]):
@@ -232,43 +241,49 @@ class Switch:
         if type(commands) is not list:
             commands = map(str.strip, commands.replace('\n', ';').split(';'))
 
-        with self._connection() as tn:
-            output = ''
-            for cmd in commands:
-                # skip empty commands
-                if not cmd:
-                    continue
-                tn.sendline(cmd)
+        tn = self._telnet()
 
-                # on dlink cli skip writing to output command confirmation
-                if re.search('DGS|DES', self.model):
-                    tn.expect('Command:')
-                tn.expect(self._endline)
+        output = ''
+        for cmd in commands:
+            # skip empty commands
+            if not cmd:
+                continue
+            tn.sendline(cmd)
 
-                # regex for cisco cli configure terminal mode
-                conf_t = self._prompt[:-1]+'\([a-z0-9-/]+\)#'
+            # on dlink cli skip writing to output command confirmation
+            if re.search('DGS|DES', self.model):
+                tn.expect('Command:')
+            tn.expect(self._endline)
 
-                # dict of expectations and key responses for them
-                # prompt - break expect loop
-                # All/More - page processing
-                # Refresh - quit from monitoring
-                page_exp = {self._prompt: 'break',
-                            conf_t: 'break',
-                            'All': 'a',
-                            'More': ' ',
-                            'Refresh': 'q'}
+            # regex for cisco cli configure terminal mode
+            conf_t = self._prompt[:-1]+'\([a-z0-9-/]+\)#'
 
-                while True:
-                    match = tn.expect(list(page_exp.keys()))
-                    output += tn.before
-                    send_key = list(page_exp.values())[match]
-                    if send_key == 'break':
-                        break
-                    else:
-                        tn.send(send_key)
+            # dict of expectations and key responses for them
+            # prompt - break expect loop
+            # All/More - page processing
+            # Refresh - quit from monitoring
+            page_exp = {self._prompt: 'break',
+                        conf_t: 'break',
+                        'All': 'a',
+                        'More': ' ',
+                        'Refresh': 'q'}
+
+            while True:
+                match = tn.expect(list(page_exp.keys()))
+                output += tn.before
+                send_key = list(page_exp.values())[match]
+                if send_key == 'break':
+                    break
+                else:
+                    tn.send(send_key)
 
             # return result of commands
             return output.strip()
+
+    def __del__(self):
+        # close telnet connection on class destruction
+        self._close_telnet()
+        # print('switch object destroyed')
 
 
 def ping(ip):
