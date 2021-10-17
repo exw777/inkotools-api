@@ -28,6 +28,11 @@ $ source .venv/bin/activate
 $ pip install -r requirements.txt
 ```
 
+> Если при установке зависимости `easysnmp` возникает ошибка, возможно, в системе не установлена библиотека `net-snmp`. Подробнее в руководстве [easysnmp](https://easysnmp.readthedocs.io/en/latest/#installation).
+
+
+> Если при запуске скриптов возникает ошибка привилегий, возможно, значение параметра ядра `net.ipv4.ping_group_range` равно `1 0`, нужно исправить его на `0 2147483647`. В разных дистрибутивах используются разные значения по умолчанию. Подробнее в документации [icmplib](https://github.com/ValentinBELYN/icmplib/blob/main/docs/6-use-icmplib-without-privileges.md).
+
 ## Настройка
 
 Файлы конфигурации находятся в директории `config`. Используется формат `YAML`.
