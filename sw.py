@@ -11,10 +11,10 @@ import pexpect
 import logging
 import logging.config
 
-import config
+from config import config
 
 log = logging.getLogger()
-logging.config.dictConfig(config.LOGGER)
+logging.config.dictConfig(config['logger'])
 
 NETS = netaddr.IPSet(netaddr.IPRange('192.168.57.1', '192.168.57.249')) |\
     netaddr.IPSet(netaddr.IPRange('192.168.58.2', '192.168.58.249')) |\
@@ -163,9 +163,9 @@ class Switch:
         if not hasattr(self, '_connection') or not self._connection.isalive():
             # set credentials
             if re.search('DXS|3627G', self.model):
-                creds = config.SECRETS['admin_profile']
+                creds = config['secrets']['admin_profile']
             else:
-                creds = config.SECRETS['user_profile']
+                creds = config['secrets']['user_profile']
 
             # set prompt
             if re.search('DXS-1210-12SC/A1', self.model):
