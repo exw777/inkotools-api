@@ -35,24 +35,23 @@ $ pip install -r requirements.txt
 
 ## Настройка
 
-Файлы конфигурации находятся в директории `config`. Используется формат `YAML`.
+Файлы конфигурации находятся в директории `config`. Используется формат `YAML`. С репозиторием поставляются файлы стандартных настроек `*.sample.yml`. Для начальной конфигурации можно использовать модуль `config.py`, при запуске он скопирует все стандартные настройки в соответствующие файлы.
 
 ### Логины и пароли
 
-Файл `secrets.yml` содержит пароли для доступа к коммутаторам. Можно использовать как образец `config/secrets.sample.yml`, переименовать, и вписать свои данные.
+Файл `secrets.yml` содержит пароли для доступа к коммутаторам.
 
 - `admin_profile` - профиль для узловых коммутаторов
 - `user_profile` - профиль для коммутаторов уровня доступа
 
 ```yaml
 ---
-secrets:
-  admin_profile:
-    login: admin
-    password: adminpassword
-  user_profile:
-    login: user
-    password: userpassword
+admin_profile:
+  login: admin
+  password: adminpassword
+user_profile:
+  login: user
+  password: userpassword
 ...
 ```
 
@@ -180,6 +179,27 @@ $ ./db.py search qsw
 $ ./sw.py 59.75 send "sh ports 1; conf ports 1 st d; sh ports 1; conf ports 1 st e"
 $ ./sw.py 58.236 send "sh run int eth 1/2; conf t; int eth 1/2; no shut; end; sh run int eth 1/2; conf t; int eth 1/2; shut;"
 $ ./sw.py 59.75 send "sh vlan
-dquote> create vlan 666 tag 666; conf vlan 66 add tag 1
+dquote> create vlan 666 tag 666; conf vlan 666 add tag 1
 dquote> sh vlan"
+```
+### Работа в рамках одной telnet-сессии
+
+```python
+from sw import Switch
+
+test_sw = Switch('192.168.59.75')
+
+print(f'telnet содениение инициируется при вызове первой команды:\n',
+      test_sw.send("sh sw"))
+print('очищаем логи')
+test_sw.send("cl log")
+print('переходим в интерактивный режим, для выхода нажмите `Ctrl+]`')
+test_sw.interact()
+print('запускаем еще команды без вывода результатов')
+test_sw.send(['create vlan 666 tag 666',
+              'conf vlan 666 add tag 1'])
+print(f'печатаем вывод sh vlan 666:\n', test_sw.send('sh vlan 666'))
+print('проверяем логи, новых telnet соединений не должно быть')
+print(test_sw.send("sh log"))
+
 ```
