@@ -1,0 +1,10 @@
+{# save configuration of switch -#}
+{%- if sw.model in ['QSW-2800-28T-AC','DXS-3600-32S','DXS-1210-12SC/A2','DXS-1210-28S'] -%}
+copy run st
+{%- elif sw.model == 'DXS-1210-12SC/A1' -%}
+save startup-config
+{%- elif sw.model == 'GEPON' -%}
+system save all
+{%- else -%}
+save
+{%- endif -%}

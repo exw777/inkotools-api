@@ -293,11 +293,13 @@ class Switch:
             # prompt - break expect loop
             # All/More - page processing
             # Refresh - quit from monitoring
+            # [y/n] (ignore case) - saving in cisco cli
             page_exp = {self._prompt: 'break',
                         conf_t: 'break',
                         'All': 'a',
                         'More': ' ',
-                        'Refresh': 'q'}
+                        'Refresh': 'q',
+                        '(?i)y/n]:': 'y\r'}
             cmd_out = ''
             while True:
                 match = tn.expect(list(page_exp.keys()))
@@ -365,9 +367,13 @@ if __name__ == '__main__':
     @cli.command()
     @click.pass_context
     @click.argument('cmd')
-    def send(ctx, cmd):
+    @click.option('--template', is_flag=True, help='Use template file.')
+    def send(ctx, cmd, template):
         """Send CMD to switch via telnet"""
-        print(ctx.obj.send(cmd))
+        if template:
+            print(ctx.obj.send(template=cmd))
+        else:
+            print(ctx.obj.send(commands=cmd))
 
     @cli.command()
     @click.pass_context
