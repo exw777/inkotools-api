@@ -200,16 +200,16 @@ class Switch:
                 self._prompt = tn.before.split()[-1] + prompt
 
             self._connection = tn
-            log.debug('connected')
+            log.debug('new telnet connection')
         else:
-            log.debug('already connected')
+            log.debug('telnet already connected')
         return self._connection
 
     def _close_telnet(self):
         """Close telnet connection"""
         if hasattr(self, '_connection'):
             self._connection.close()
-            log.debug('disconnected')
+            log.debug('telnet connection closed')
 
     def interact(self):
         """Interact with switch via telnet"""
@@ -219,7 +219,7 @@ class Switch:
         term_title = f'[{short_ip(self.ip)}] {self.location}'
         print(f'\33]0;{term_title}\a', end='', flush=True)
         tn.interact()
-        print('\nConnection closed')
+        print('\nInteraction completed')
 
     def send(self, commands=[]):
         """Send commands to switch
@@ -232,9 +232,12 @@ class Switch:
         Returns: Result of running commands as plain text.
         """
 
+        log.debug(f'raw commands: {commands}')
         # if commands are plain text, split it, and trim extra spaces
         if type(commands) is not list:
-            commands = map(str.strip, commands.replace('\n', ';').split(';'))
+            commands = list(
+                map(str.strip, commands.replace('\n', ';').split(';')))
+            log.debug(f'converted commands: {commands}')
 
         tn = self._telnet()
 
@@ -243,6 +246,7 @@ class Switch:
             # skip empty commands
             if not cmd:
                 continue
+            log.debug(f'command: {cmd}')
             tn.sendline(cmd)
 
             # on dlink cli skip writing to output command confirmation
@@ -262,23 +266,25 @@ class Switch:
                         'All': 'a',
                         'More': ' ',
                         'Refresh': 'q'}
-
+            cmd_out = ''
             while True:
                 match = tn.expect(list(page_exp.keys()))
-                output += tn.before
+                cmd_out += tn.before
                 send_key = list(page_exp.values())[match]
                 if send_key == 'break':
                     break
                 else:
                     tn.send(send_key)
+            log.debug(f'output: {cmd_out}')
+            output += cmd_out
 
-            # return result of commands
-            return output.strip()
+        # return result of commands
+        return output.strip()
 
     def __del__(self):
         # close telnet connection on class destruction
         self._close_telnet()
-        # print('switch object destroyed')
+        log.debug('switch object destroyed')
 
 
 def ping(ip):
@@ -330,5 +336,12 @@ if __name__ == '__main__':
     def send(ctx, cmd):
         """Send CMD to switch via telnet"""
         print(ctx.obj.send(cmd))
+
+    @cli.command()
+    @click.pass_context
+    @click.argument('oid')
+    def snmp(ctx, oid):
+        """SNMP get OID from switch"""
+        print(ctx.obj.get_oid(oid))
 
     cli()
