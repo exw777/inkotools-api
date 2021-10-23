@@ -10,11 +10,15 @@ import re
 import pexpect
 import logging
 import logging.config
+from jinja2 import Environment as j2env
+from jinja2 import FileSystemLoader as j2loader
 
 from config import config
 
 log = logging.getLogger()
 logging.config.dictConfig(config['logger'])
+
+j2 = j2env(loader=j2loader('templates/'))
 
 NETS = netaddr.IPSet(netaddr.IPRange('192.168.57.1', '192.168.57.249')) |\
     netaddr.IPSet(netaddr.IPRange('192.168.58.2', '192.168.58.249')) |\
@@ -221,7 +225,7 @@ class Switch:
         tn.interact()
         print('\nInteraction completed')
 
-    def send(self, commands=[]):
+    def send(self, commands=[], template=None):
         """Send commands to switch
 
         Arguments:
@@ -229,8 +233,18 @@ class Switch:
         commands: It can be one command, list of commands, or plain text,
                   where commands are separated by newlines or symbols ';'.
 
+        template: Load commands from j2 file of templates directory.
+                  If specified, commands argument is ignored.
+
         Returns: Result of running commands as plain text.
         """
+
+        if template:
+            log.debug(f'template: {template}')
+            try:
+                commands = j2.get_template(template).render(sw=self)
+            except Exception as e:
+                log.error(f'Template {template} loading error: {str(e)}')
 
         log.debug(f'raw commands: {commands}')
         # if commands are plain text, split it, and trim extra spaces
@@ -238,6 +252,11 @@ class Switch:
             commands = list(
                 map(str.strip, commands.replace('\n', ';').split(';')))
             log.debug(f'converted commands: {commands}')
+
+        # exit on empty commands
+        if not commands:
+            log.warning('empty commands list')
+            return None
 
         tn = self._telnet()
 
