@@ -163,6 +163,11 @@ class Switch:
     def _telnet(self):
         """Connect via telnet and keep connection in returned object"""
 
+        # HARDCODE: huawey is restricted for telnet connection
+        if self.model == 'S5328C-EI-24S':
+            log.error(f'huawey is restricted for telnet connection')
+            return None
+
         # check that connection is not established
         if not hasattr(self, '_connection') or not self._connection.isalive():
             # set credentials
@@ -218,6 +223,9 @@ class Switch:
     def interact(self):
         """Interact with switch via telnet"""
         tn = self._telnet()
+        if not tn:
+            log.debug('telnet object is empty')
+            return None
         print(self.show())
         # set terminal title
         term_title = f'[{short_ip(self.ip)}] {self.location}'
@@ -259,6 +267,9 @@ class Switch:
             return None
 
         tn = self._telnet()
+        if not tn:
+            log.debug('telnet object is empty')
+            return None
 
         output = ''
         for cmd in commands:
@@ -267,6 +278,8 @@ class Switch:
                 continue
             log.debug(f'command: {cmd}')
             tn.sendline(cmd)
+            # gpon doesn't work without next line
+            tn.send('\r')
 
             # on dlink cli skip writing to output command confirmation
             if re.search('DGS|DES', self.model):
