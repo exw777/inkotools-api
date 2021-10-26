@@ -233,7 +233,7 @@ class Switch:
         tn.interact()
         print('\nInteraction completed')
 
-    def send(self, commands=[], template=None):
+    def send(self, commands=[], template=None, **kwargs):
         """Send commands to switch
 
         Arguments:
@@ -249,8 +249,9 @@ class Switch:
 
         if template:
             log.debug(f'template: {template}')
+            log.debug(f'kwargs: {kwargs}')
             try:
-                commands = j2.get_template(template).render(sw=self)
+                commands = j2.get_template(template).render(sw=self, **kwargs)
             except Exception as e:
                 log.error(f'Template {template} loading error: {str(e)}')
 
@@ -364,16 +365,25 @@ if __name__ == '__main__':
         """Interact with switch via telnet"""
         ctx.obj.interact()
 
-    @cli.command()
+    @cli.command(context_settings=dict(
+        ignore_unknown_options=True,
+        allow_extra_args=True,
+    ))
     @click.pass_context
-    @click.argument('cmd')
-    @click.option('--template', is_flag=True, help='Use template file.')
-    def send(ctx, cmd, template):
+    @click.argument('arg')
+    @click.option('--file', is_flag=True, help='Use template file.')
+    def send(ctx, arg, file):
         """Send CMD to switch via telnet"""
-        if template:
-            print(ctx.obj.send(template=cmd))
+        if file:
+            # parse extra params for template
+            params = dict()
+            for item in ctx.args:
+                params.update([item.split('=')])
+                # print(ctx.obj.send(template=cmd))
+            print(ctx.obj.send(template=arg, **params))
+            # print(**params)
         else:
-            print(ctx.obj.send(commands=cmd))
+            print(ctx.obj.send(commands=arg))
 
     @cli.command()
     @click.pass_context
