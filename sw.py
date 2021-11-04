@@ -255,17 +255,18 @@ class Switch:
             except Exception as e:
                 log.error(f'Template {template} loading error: {str(e)}')
 
-        log.debug(f'raw commands: {commands}')
-        # if commands are plain text, split it, and trim extra spaces
-        if type(commands) is not list:
-            commands = list(
-                map(str.strip, commands.replace('\n', ';').split(';')))
-            log.debug(f'converted commands: {commands}')
-
         # exit on empty commands
         if not commands:
             log.warning('empty commands list')
             return None
+
+        log.debug(f'raw commands: {commands}')
+
+        # if commands are plain text, split it to list, and trim extra spaces
+        if type(commands) is not list:
+            commands = list(
+                map(str.strip, commands.replace('\n', ';').split(';')))
+            log.debug(f'converted commands: {commands}')
 
         tn = self._telnet()
         if not tn:
