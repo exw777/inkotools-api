@@ -311,12 +311,16 @@ class Switch:
             # All/More - page processing
             # Refresh - quit from monitoring
             # [y/n] (ignore case) - saving in cisco cli
-            page_exp = {self._prompt: 'break',
-                        conf_t: 'break',
-                        'All': 'a',
-                        'More': ' ',
-                        'Refresh': 'q',
-                        '(?i)y/n]:': 'y\r'}
+            # ]? DXS-3600 confirm tftp backup
+            page_exp = {
+                self._prompt: 'break',
+                conf_t: 'break',
+                'All': 'a',
+                'More': ' ',
+                'Refresh': 'q',
+                '(?i)y/n]:': 'y\r',
+                ']\?': '\r',
+            }
             cmd_out = ''
             while True:
                 match = tn.expect(list(page_exp.keys()))
