@@ -69,10 +69,6 @@ class Switch:
         """
         # set ip address
         self.ip = netaddr.IPAddress(ip)
-        if not self.ip in NETS:
-            # raise ValueError(
-            #     f'address {self.ip} is out of inkotel switches range')
-            log.warning(f'Address {self.ip} is out of inkotel switches range')
 
         # check availability
         # arpreq is faster than icmp, but only works when
@@ -90,6 +86,24 @@ class Switch:
 
         # set system location
         self.location = self.get_oid('1.3.6.1.2.1.1.6.0')
+
+        # set managment ip for L3 switches
+        # we need the first interface in snmp_walk 1.3.6.1.2.1.16.19.11.1.1,
+        # but snmp_walk is slower, than hardcoded snmp_get for two models
+        if self.model == 'DXS-3600-32S':
+            o = '5120'
+        elif self.model == 'DGS-3627G':
+            o = '5121'
+        else:
+            o = None
+        if o:
+            self.mgmt_ip = netaddr.IPAddress(self.get_oid(
+                f'1.3.6.1.2.1.16.19.11.1.1.{o}'))
+        else:
+            self.mgmt_ip = self.ip
+
+        if not self.mgmt_ip in NETS:
+            log.warning(f'Address {self.ip} is out of inkotel switches range')
 
         # set mac address
         # first, try via arp, second via snmp
@@ -126,6 +140,7 @@ class Switch:
             else:
                 self.mac = netaddr.EUI(0)
                 log.warning(f"Can't get mac for {self.ip}, using: {self.mac}")
+        log.debug(f'[{self.ip}] switch object created')
 
     class UnavailableError(Exception):
         """Custom exception when switch is not available"""
@@ -152,7 +167,7 @@ class Switch:
         else:
             model_color = MODEL_COLORS['DEFAULT']
         short_line = Fore.YELLOW + self.model + Fore.RESET + \
-            ' [' + Fore.CYAN + short_ip(self.ip) + Fore.RESET + '] ' + \
+            ' [' + Fore.CYAN + short_ip(self.mgmt_ip) + Fore.RESET + '] ' + \
             model_color + self.location + Fore.RESET + Style.RESET_ALL
 
         full_line = short_line + '\n' + \
@@ -209,16 +224,16 @@ class Switch:
                 self._prompt = tn.before.split()[-1] + prompt
 
             self._connection = tn
-            log.debug('new telnet connection')
+            log.debug(f'[{self.ip}] new telnet connection')
         else:
-            log.debug('telnet already connected')
+            log.debug(f'[{self.ip}] telnet already connected')
         return self._connection
 
     def _close_telnet(self):
         """Close telnet connection"""
         if hasattr(self, '_connection'):
             self._connection.close()
-            log.debug('telnet connection closed')
+            log.debug(f'[{self.ip}] telnet connection closed')
 
     def interact(self):
         """Interact with switch via telnet"""
@@ -320,7 +335,7 @@ class Switch:
     def __del__(self):
         # close telnet connection on class destruction
         self._close_telnet()
-        log.debug('switch object destroyed')
+        log.debug(f'[{self.ip}] switch object destroyed')
 
 
 def ping(ip):
