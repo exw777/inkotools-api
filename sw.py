@@ -377,11 +377,11 @@ if __name__ == '__main__':
         if file:
             # parse extra params for template
             params = dict()
+            from ast import literal_eval
             for item in ctx.args:
-                params.update([item.split('=')])
-                # print(ctx.obj.send(template=cmd))
+                p = item.split('=')
+                params[p[0]] = literal_eval(p[1])
             print(ctx.obj.send(template=arg, **params))
-            # print(**params)
         else:
             print(ctx.obj.send(commands=arg))
 
