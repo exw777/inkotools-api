@@ -112,6 +112,7 @@ model [short_ip] location
 
 На данный момент протестированы на всех моделях коммутаторов следующие предустановленные шаблоны:
 - `save.j2` - сохранение коммутаторов
+- `port_state.j2` - изменение состояния порта. Параметры: `port` - номер порта. `state` - включить или выключить порт, поддерживаются значения `True`/`False`, либо `0`/`1`, если параметр не задан, то выполняется команда для просмотра состояния порта. `comment` - комментарий на порту, если параметр не задан, то старый комментарий не меняется, если явно задать пустую строку, `None`, `0` или `False`, то комментарий очищается.
 
 ### db.py
 
@@ -221,12 +222,12 @@ print(test_sw.send("sh log"))
 
 При импорте класса:
 ```python
-result = test_sw.send(template='test.j2')
+result = test_sw.send(template='save.j2')
 # пример с дополнительными аргументами:
-result = test_sw.send(template='change_port.j2', port=1, state=False)
+result = test_sw.send(template='port_state.j2', port=1, state=False, comment='blocked port')
 ```
 При запуске скрипта:
 ```shell
-$ ./sw.py 59.75 send --file test.j2
-$ ./sw.py 59.75 send --file change_port.j2 port=1 state=False
+$ ./sw.py 59.75 send --file save.j2
+$ ./sw.py 59.75 send --file port_state.j2 port=1 state=False comment='blocked port'
 ```

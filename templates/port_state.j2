@@ -1,0 +1,40 @@
+{# change port state for access switches only -#}
+{# params: sw, port, state, comment -#}
+{% if port is defined -%}
+    {%- if sw.model == 'QSW-2800-28T-AC' -%}
+        {%- if state is not defined -%}
+            sh int eth 1/{{port}}
+        {%- else -%}
+conf t
+    int eth 1/{{ port }}
+    {%- if state +%}
+        no shutdown
+    {%- else +%}
+        shutdown
+    {%- endif -%}
+    {%- if comment +%}
+        description {{ comment }}
+    {%- elif comment is defined +%}
+        no description
+    {%- endif +%}
+    exit
+end
+        {%- endif -%}
+    {%- elif 'DES' in sw.model or sw.model in ['DGS-1210-28X/ME/B1',
+                                                'DGS-3000-26TC'] -%}
+        {%- if state is not defined -%}
+            sh ports {{port}}
+        {%- else -%}
+            conf ports {{ port }} state
+            {%- if state +%} enable
+            {%- else +%} disable
+            {%- endif -%}
+            {%- if comment +%} description {{ comment }}
+            {%- elif comment is defined -%}
+                {%- if '3526' in sw.model +%} description ""
+                {%- else +%} clear_description
+                {%- endif -%}
+            {%- endif -%}
+        {%- endif -%}
+    {%- endif -%}
+{%- endif -%}
