@@ -13,6 +13,8 @@ import logging.config
 from jinja2 import Environment as j2env
 from jinja2 import FileSystemLoader as j2loader
 from time import time
+import asyncio
+import concurrent.futures
 
 from config import config
 
@@ -211,7 +213,7 @@ class Switch:
 
             # TODO: different timeout for each model
             tn = pexpect.spawn(f'telnet {self.ip}',
-                               timeout=45, encoding="utf-8")
+                               timeout=120, encoding="utf-8")
 
             tn.expect('ame:|in:')
             tn.send(creds['login']+'\r')
