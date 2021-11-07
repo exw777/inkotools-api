@@ -242,6 +242,7 @@ $ ./sw.py 59.75 send --file port_state.j2 port=1 state=False comment='blocked po
 import asyncio
 from sw import Switch, batch_async
 from db import sw_list
+from time import time
 
 # пример вызова внутреннего метода 'backup' для всех коммутаторов из локальной базы данных
 asyncio.run(batch_async(sw_list()['switches'], 'backup'))
