@@ -344,6 +344,50 @@ class Switch:
         self._close_telnet()
         log.debug(f'[{self.ip}] switch object destroyed')
 
+    def backup(self, **kwargs):
+        """Backup via tftp
+
+        Optional arguments:
+
+            server: Default is 250 host of switch subnet.
+
+            path:   Default is 'backup'.
+
+        Returns: True if file transfer is successful,
+                 raw result otherwise.
+        """
+        start = time()
+        try:
+            result = self.send(template='backup.j2', **kwargs)
+        except Exception as e:
+            log.error(f'[{self.ip}] backup error: {e}')
+            return None
+        end = time() - start
+        r = ' successful|Success|finished|complete|Upload configuration.*Done'
+        if result and re.search(r, result):
+            log.info(f'[{self.ip}] backup sent in {end:.2f}s')
+            return True
+        else:
+            log.error(f'[{self.ip}] backup result is: {result}')
+            return result
+
+    def save(self):
+        """Save config"""
+        start = time()
+        try:
+            result = self.send(template='save.j2')
+        except Exception as e:
+            log.error(f'[{self.ip}] saving error: {e}')
+            return None
+        end = time() - start
+        r = 'Done|Success|OK| success'
+        if result and re.search(r, result):
+            log.info(f'[{self.ip}] saved in {end:.2f}s')
+            return True
+        else:
+            log.error(f'[{self.ip}] wrong saving result: {result}')
+            return result
+
 
 def ping(ip):
     """Ping with one packet"""
