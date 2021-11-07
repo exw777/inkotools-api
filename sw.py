@@ -12,6 +12,7 @@ import logging
 import logging.config
 from jinja2 import Environment as j2env
 from jinja2 import FileSystemLoader as j2loader
+from time import time
 
 from config import config
 
@@ -153,7 +154,8 @@ class Switch:
 
     def get_oid(self, oid):
         """Get snmp oid from switch"""
-        return snmp_get(oid, hostname=str(self.ip), version=2).value
+        return snmp_get(oid, hostname=str(self.ip),
+                        version=2, timeout=3).value
 
     def show(self, full=False):
         """Print short switch description
@@ -272,7 +274,7 @@ class Switch:
 
         # exit on empty commands
         if not commands:
-            log.warning('empty commands list')
+            log.warning(f'[{self.ip}] empty commands list')
             return None
 
         log.debug(f'raw commands: {commands}')
@@ -316,7 +318,7 @@ class Switch:
             page_exp = {
                 self._prompt: 'break',
                 conf_t: 'break',
-                'All': 'a',
+                '(?i)all': 'a',
                 'More': ' ',
                 'Refresh': 'q',
                 '(?i)y/n]:': 'y\r',
