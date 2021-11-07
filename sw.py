@@ -409,6 +409,54 @@ def short_ip(ip):
     return re.sub(rf'^192\.168\.({rx}\.{rx})$', '\g<1>', str(ip))
 
 
+async def batch_async(sw_list, func, external=False, max_workers=1024):
+    """Asyncio batch processing for list of switches
+
+    Run: asyncio.run(batch_async(*args))
+
+    Arguments:
+
+        sw_list:    list of switches ip addresses
+
+           func:    string with name of internal method of Switch class
+                    or function object for external function (see below)
+
+    Optional arguments:
+
+        external:   boolean value, if set to True, external function 
+                    expected in 'func' argument. Required arg is 'sw',
+                    which is Switch class instance.
+                    default: False
+
+     max_workers:   max count of parallel threads used in asyncio 
+                    default: 1024
+    """
+
+    with concurrent.futures.ThreadPoolExecutor(
+            max_workers=max_workers,
+            thread_name_prefix='sw') as pool:
+        loop = asyncio.get_running_loop()
+        jobs = []
+
+        for ip in sw_list:
+            try:
+                sw = Switch(ip)
+            except Switch.UnavailableError as e:
+                log.warning(e)
+            except Exception as e:
+                log.error(f'{ip}: {e}')
+            else:
+                if external:
+                    args = [func, sw]
+                else:
+                    args = [eval(f'sw.{func}')]
+                jobs.append(loop.run_in_executor(pool, *args))
+
+        try:
+            await asyncio.gather(*jobs, return_exceptions=False)
+        except Exception as e:
+            log.error(f'async error: {e}')
+
 if __name__ == '__main__':
     import click
 
