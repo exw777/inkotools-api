@@ -296,7 +296,8 @@ class Switch:
             log.debug(f'command: {cmd}')
             tn.sendline(cmd)
             # gpon doesn't work without next line
-            tn.send('\r')
+            if re.search('GEPON|LTP-8X', self.model):
+                tn.send('\r')
 
             # on dlink cli skip writing to output command confirmation
             if re.search('DGS|DES', self.model):
