@@ -390,6 +390,37 @@ class Switch:
             log.error(f'[{self.ip}] wrong saving result: {result}')
             return result
 
+    def get_acl(self, **kwargs):
+        """Get acl from switch
+
+        Optional arguments:
+
+            port: If not defined, returns all acl entries
+
+        Returns: list of tulpes (port, ip)
+
+        """
+        try:
+            result = self.send(template='get_acl.j2', **kwargs)
+        except Exception as e:
+            log.error(f'[{self.ip}] get acl error: {e}')
+            return None
+        if not result:
+            return None
+        if re.search('QSW', self.model):
+            # q-tech
+            regex = (r'Interface Ethernet1/(?P<port>\d{1,2})'
+                     r'\s+am port\s+am ip-pool\s+'
+                     r'(?P<ip>\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3})')
+        else:
+            # d-link
+            regex = (r'source_ip\s+'
+                     r'(?P<ip>\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3})'
+                     r'\s+port\s+(?P<port>\d{1,2})')
+        result = [(m.group('port'), m.group('ip'))
+                  for m in re.finditer(regex, result)]
+        return result
+
 
 def ping(ip):
     """Ping with one packet"""
