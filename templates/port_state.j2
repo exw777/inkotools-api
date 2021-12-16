@@ -23,7 +23,7 @@ end
     {%- elif 'DES' in sw.model or sw.model in ['DGS-1210-28X/ME/B1',
                                                 'DGS-3000-26TC'] -%}
         {%- if state is not defined -%}
-            sh ports {{port}}
+            sh ports {{ port }}
         {%- else -%}
             conf ports {{ port }} state
             {%- if state +%} enable
