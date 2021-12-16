@@ -390,18 +390,13 @@ class Switch:
             log.error(f'[{self.ip}] wrong saving result: {result}')
             return result
 
-    def get_acl(self, **kwargs):
+    def get_acl(self, port=None):
         """Get acl from switch
 
-        Optional arguments:
-
-            port: If not defined, returns all acl entries
-
-        Returns: list of tulpes (port, ip)
-
+        If port is not defined, returns all entries
         """
         try:
-            result = self.send(template='get_acl.j2', **kwargs)
+            result = self.send(template='acl.j2', port=port)
         except Exception as e:
             log.error(f'[{self.ip}] get acl error: {e}')
             return None
@@ -420,6 +415,50 @@ class Switch:
         result = [(m.group('port'), m.group('ip'))
                   for m in re.finditer(regex, result)]
         return result
+
+    def add_acl(self, port, ip):
+        """Add acl to switch port"""
+        try:
+            result = self.send(template='acl.j2', port=port, ip=ip)
+        except Exception as e:
+            log.error(f'[{self.ip}] add acl error: {e}')
+            return False
+        if re.search('ERROR|[Ff]ail', result):
+            log.error(f'[{self.ip}] failed to add acl {ip} port {port}')
+            return False
+        else:
+            return True
+
+    def delete_acl(self, port):
+        """Delete acl from switch port"""
+        try:
+            result = self.send(template='acl.j2', port=port, ip=None)
+        except Exception as e:
+            log.error(f'[{self.ip}] delete acl error: {e}')
+            return False
+        if re.search('ERROR|[Ff]ail', result):
+            log.error(f'[{self.ip}] failed to delete acl {ip} port {port}')
+            return False
+        else:
+            return True
+
+    def set_acl(self, port, ip):
+        """Set acl to switch port
+
+        Overwrites value if entry exists
+        """
+        if self.get_acl(port=port):
+            self.delete_acl(port=port)
+        try:
+            result = self.send(template='acl.j2', port=port, ip=ip)
+        except Exception as e:
+            log.error(f'[{self.ip}] set acl error: {e}')
+            return False
+        if re.search('ERROR|[Ff]ail', result):
+            log.error(f'[{self.ip}] failed to set acl {ip} port {port}')
+            return False
+        else:
+            return True
 
 
 def ping(ip):
