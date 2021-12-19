@@ -409,11 +409,23 @@ class Switch:
                      r'(?P<ip>\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3})')
         else:
             # d-link
-            regex = (r'source_ip\s+'
-                     r'(?P<ip>\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3})'
-                     r'.+port\s+(?P<port>\d{1,2})')
-        result = [(m.group('port'), m.group('ip'))
-                  for m in re.finditer(regex, result)]
+            regex = (r'access_id\s+(?P<id>\d+)\s+.+source_ip\s+'
+                     r'(?P<ip>\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3})\s*'
+                     r'(.+mask\s+(?P<mask>\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}))?'
+                     r'\s+port\s+(?P<port>\d{1,2})')
+        result = [m.groupdict() for m in re.finditer(regex, result)]
+        # check if there are non-standart mask in acl rules
+        for i in result:
+            if 'mask' in i.keys() and i['mask'] \
+                    and i['mask'] != '255.255.255.255':
+                log.warning(f"[{self.ip}] port {i['port']} acl {i['ip']}"
+                            f" has non-standard mask: {i['mask']}")
+        # check if there are several acl for one port
+        ports = list(map(lambda x: x['port'], result))
+        for p in set(ports):
+            cnt = ports.count(p)
+            if cnt > 1:
+                log.warning(f'[{self.ip}] port {p} has {cnt} acl rules')
         return result
 
     def add_acl(self, port, ip):
