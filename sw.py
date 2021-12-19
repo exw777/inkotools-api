@@ -411,7 +411,7 @@ class Switch:
             # d-link
             regex = (r'source_ip\s+'
                      r'(?P<ip>\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3})'
-                     r'\s+port\s+(?P<port>\d{1,2})')
+                     r'.+port\s+(?P<port>\d{1,2})')
         result = [(m.group('port'), m.group('ip'))
                   for m in re.finditer(regex, result)]
         return result
