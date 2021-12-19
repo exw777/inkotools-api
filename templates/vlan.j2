@@ -1,0 +1,28 @@
+{# manage vlans on access switches -#}
+{# params: sw, vid, action -#}
+{% if vid is not defined -%}{%- set vid = None -%}{%- endif -%}
+{%- if action is not defined -%}{%- set action = None -%}{%- endif -%}
+{%- if sw.model == 'QSW-2800-28T-AC' -%}
+    {%- if action not in ['add', 'delete'] -%}
+sh vlan {% if vid %} id {{ vid }} {% endif -%}
+    {%- elif vid -%}
+conf t
+        {%- if action == 'add' and vid +%}
+    vlan {{ vid }}
+        name {{ vid }}
+    exit
+        {%- elif action == 'delete' and vid +%}
+    no vlan {{ vid }}
+        {%- endif +%}
+end
+    {%- endif -%}
+{%- elif 'DES' in sw.model or sw.model in ['DGS-1210-28X/ME/B1', 'DGS-3000-26TC'] -%}
+    {%- if action == 'add' and vid -%}
+create vlan {{ vid }} tag {{ vid }}
+    {%- elif action == 'delete' and vid -%}
+delete vlan {{ vid }}
+    {%- else -%}
+        {%- if vid == 1 -%}{%- set vid = 'default' -%}{%- endif -%}
+sh vlan {% if vid %} {{ vid }} {% endif -%}
+    {%- endif -%}
+{%- endif -%}

@@ -472,6 +472,96 @@ class Switch:
         else:
             return True
 
+    def get_vlan(self, vid=None):
+        """Get tagged and untagged ports for vlan
+
+        If vid is not defined, returns all vlans
+
+        Returns: list of dicts:
+
+                    [{'vid': int,
+                    'tagged': [int, ...],
+                    'untagged': [int, ...]
+                    }, ...]
+        """
+        try:
+            result_raw = self.send(template='vlan.j2', vid=vid)
+        except Exception as e:
+            log.error(f'[{self.ip}] get vlan error: {e}')
+            return None
+        if not result_raw:
+            return None
+        result = []
+        if re.search('QSW', self.model):
+            regex = (r'\n(?P<vid>\d+)\s+(?:.*?)'
+                     r'(?P<ports>(?:\s+Ethernet.*\s+\r\n)+)')
+            for r in re.finditer(regex, result_raw):
+                vid = r.group('vid')
+                untagged = re.findall(r'Ethernet1/(\d+)\s+',
+                                      r.group('ports'))
+                tagged = re.findall(r'Ethernet1/(\d+)\(T\)\s+',
+                                    r.group('ports'))
+                result.append({'vid': vid,
+                               'tagged': tagged,
+                               'untagged': untagged})
+        else:
+            regex = (r'VID\s+:\s+(?P<vid>\d+)\s+(?s:.*?)'
+                     r'Tagged [Pp]orts\s+:\s+'
+                     r'(?P<tagged>[-,0-9]*)\s+(?s:.*?)'
+                     r'Untagged [Pp]orts\s+:\s+(?P<untagged>[-,0-9]*)')
+            for r in re.finditer(regex, result_raw):
+                vid = r.group('vid')
+                tagged = interval_to_list(r.group('tagged'))
+                untagged = interval_to_list(r.group('untagged'))
+                result.append({'vid': vid,
+                               'tagged': tagged,
+                               'untagged': untagged})
+        return result
+
+    def add_vlan(self, vid):
+        """Add new vlan to switch"""
+        check_vlan = self.get_vlan(vid=vid)
+        if check_vlan:
+            log.error(f'[{self.ip}] vlan {vid} already exists')
+            return False
+        elif check_vlan == None:
+            log.error(f'[{self.ip}] vlan check failed (wrong model?)')
+            return False
+        try:
+            result = self.send(template='vlan.j2',
+                               vid=vid, action='add')
+        except Exception as e:
+            log.error(f'[{self.ip}] create vlan {vid} error: {e}')
+            return False
+        if not (re.search('Success', result) or result == ''):
+            log.error(f'[{self.ip}] create vlan {vid} failed: {result}')
+            return False
+        else:
+            log.info(f'[{self.ip}] created vlan {vid}')
+            return True
+
+    def delete_vlan(self, vid):
+        """Delete vlan from switch"""
+        check_vlan = self.get_vlan(vid=vid)
+        if check_vlan == None:
+            log.error(f'[{self.ip}] vlan check failed (wrong model?)')
+            return False
+        elif check_vlan == []:
+            log.error(f'[{self.ip}] vlan {vid} does not exists')
+            return False
+        try:
+            result = self.send(template='vlan.j2',
+                               vid=vid, action='delete')
+        except Exception as e:
+            log.error(f'[{self.ip}] delete vlan {vid} error: {e}')
+            return False
+        if not (re.search('Success', result) or result == ''):
+            log.error(f'[{self.ip}] delete vlan {vid} failed: {result}')
+            return False
+        else:
+            log.info(f'[{self.ip}] deleted vlan {vid}')
+            return True
+
 
 def ping(ip):
     """Ping with one packet"""
@@ -489,6 +579,19 @@ def short_ip(ip):
     """Convert 192.168.x.x to x.x"""
     rx = r'([1-9]?[0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])'
     return re.sub(rf'^192\.168\.({rx}\.{rx})$', '\g<1>', str(ip))
+
+
+def interval_to_list(s):
+    """Convert 1-3,5,7-9 to [1,2,3,5,7,8,9]"""
+    if not s:
+        return []
+    ranges = list((a.split('-') for a in s.split(',')))
+    l = []
+    for r in ranges:
+        l += list(range(int(r[0]), int(r[-1])+1))
+    l = list(set(l))
+    l.sort()
+    return l
 
 
 async def batch_async(sw_list, func, external=False, max_workers=1024):
