@@ -81,7 +81,7 @@ class Switch:
                 f'Host {str(self.ip)} is not available!')
 
         # set model
-        self.model = re.search('[A-Z]{1,3}-?[0-9]{1,4}[^ ]*|GEPON',
+        self.model = re.search(r'[A-Z]{1,3}-?[0-9]{1,4}[^ ]*|GEPON',
                                self.get_oid('1.3.6.1.2.1.1.1.0'))[0]
         # add HW revision for DXS-1210-12SC
         if self.model == 'DXS-1210-12SC':
@@ -121,9 +121,9 @@ class Switch:
                 o = '1'
             elif re.search('QSW', self.model):
                 o = '3001'
-            elif re.search('3600|3526', self.model):
+            elif re.search(r'3600|3526', self.model):
                 o = '5120'
-            elif re.search('DES|DGS|DXS', self.model):
+            elif re.search(r'DES|DGS|DXS', self.model):
                 o = '5121'
             else:
                 o = None
@@ -190,7 +190,7 @@ class Switch:
         # check that connection is not established
         if not hasattr(self, '_connection') or not self._connection.isalive():
             # set credentials
-            if re.search('DXS|3627G', self.model):
+            if re.search(r'DXS|3627G', self.model):
                 creds = config['secrets']['admin_profile']
             else:
                 creds = config['secrets']['user_profile']
@@ -202,9 +202,9 @@ class Switch:
                 prompt = '#'
 
             # set endline
-            if re.search('3627G|3600|3000|3200|3028|3026|3120', self.model):
+            if re.search(r'3627G|3600|3000|3200|3028|3026|3120', self.model):
                 self._endline = '\n\r'
-            elif re.search('1210|QSW|LTP', self.model):
+            elif re.search(r'1210|QSW|LTP', self.model):
                 self._endline = '\r\n'
             elif re.search('3526', self.model):
                 self._endline = '\r\n\r'
@@ -300,16 +300,16 @@ class Switch:
             log.debug(f'command: {cmd}')
             tn.sendline(cmd)
             # gpon doesn't work without next line
-            if re.search('GEPON|LTP-8X', self.model):
+            if re.search(r'GEPON|LTP-8X', self.model):
                 tn.send('\r')
 
             # on dlink cli skip writing to output command confirmation
-            if re.search('DGS|DES', self.model):
+            if re.search(r'DGS|DES', self.model):
                 tn.expect('Command:')
             tn.expect(self._endline)
 
             # regex for cisco cli configure terminal mode
-            conf_t = self._prompt[:-1]+'\([a-z0-9-/]+\)#'
+            conf_t = self._prompt[:-1] + r'\([a-z0-9-/]+\)#'
 
             # dict of expectations and key responses for them
             # prompt - break expect loop
@@ -365,7 +365,7 @@ class Switch:
             log.error(f'[{self.ip}] backup error: {e}')
             return None
         end = time() - start
-        r = ' successful|Success|finished|complete|Upload configuration.*Done'
+        r = r' successful|Success|finished|complete|Upload configuration.*Done'
         if result and re.search(r, result):
             log.info(f'[{self.ip}] backup sent in {end:.2f}s')
             return True
@@ -382,7 +382,7 @@ class Switch:
             log.error(f'[{self.ip}] saving error: {e}')
             return None
         end = time() - start
-        r = 'Done|Success|OK| success'
+        r = r'Done|Success|OK| success'
         if result and re.search(r, result):
             log.info(f'[{self.ip}] saved in {end:.2f}s')
             return True
@@ -435,7 +435,7 @@ class Switch:
         except Exception as e:
             log.error(f'[{self.ip}] add acl error: {e}')
             return False
-        if re.search('ERROR|[Ff]ail', result):
+        if re.search(r'ERROR|[Ff]ail', result):
             log.error(f'[{self.ip}] failed to add acl {ip} port {port}')
             return False
         else:
@@ -448,7 +448,7 @@ class Switch:
         except Exception as e:
             log.error(f'[{self.ip}] delete acl error: {e}')
             return False
-        if re.search('ERROR|[Ff]ail', result):
+        if re.search(r'ERROR|[Ff]ail', result):
             log.error(f'[{self.ip}] failed to delete acl {ip} port {port}')
             return False
         else:
@@ -466,7 +466,7 @@ class Switch:
         except Exception as e:
             log.error(f'[{self.ip}] set acl error: {e}')
             return False
-        if re.search('ERROR|[Ff]ail', result):
+        if re.search(r'ERROR|[Ff]ail', result):
             log.error(f'[{self.ip}] failed to set acl {ip} port {port}')
             return False
         else:
