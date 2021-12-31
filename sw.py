@@ -518,6 +518,10 @@ class Switch:
                                'untagged': untagged})
         return result
 
+    def get_vlan_list(self):
+        """Return list of all vlans"""
+        return [v['vid'] for v in self.get_vlan()]
+
     def add_vlan(self, vid):
         """Add new vlan to switch"""
         check_vlan = self.get_vlan(vid=vid)
@@ -540,6 +544,11 @@ class Switch:
             log.info(f'[{self.ip}] created vlan {vid}')
             return True
 
+    def add_vlans(self, vid_list):
+        """Add new vlans to switch"""
+        for vid in vid_list:
+            self.add_vlan(vid)
+
     def delete_vlan(self, vid):
         """Delete vlan from switch"""
         check_vlan = self.get_vlan(vid=vid)
@@ -561,6 +570,11 @@ class Switch:
         else:
             log.info(f'[{self.ip}] deleted vlan {vid}')
             return True
+
+    def delete_vlans(self, vid_list):
+        """Delete vlans from switch"""
+        for vid in vid_list:
+            self.delete_vlan(vid)
 
 
 def ping(ip):
