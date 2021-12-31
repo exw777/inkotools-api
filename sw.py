@@ -143,6 +143,23 @@ class Switch:
             else:
                 self.mac = netaddr.EUI(0)
                 log.warning(f"Can't get mac for {self.ip}, using: {self.mac}")
+
+        # get max ports from switch model and set transit and access ports
+        max_ports = re.findall(r'(?s:.*)(\d{2})(?s:.*$)', self.model)
+        if max_ports:
+            max_ports = int(max_ports[0])
+        self.access_ports = []
+        self.transit_ports = []
+        if re.search(r'DES|QSW|3000|DGS-1210', self.model):
+            self.access_ports = list(range(1, (max_ports//8)*8 + 1))
+            self.transit_ports = list(
+                range(self.access_ports[-1] + 1, max_ports + 1))
+        elif re.search(r'DXS|DGS', self.model):
+            if max_ports > 24:
+                self.transit_ports = list(range(1, 25))
+            else:
+                self.transit_ports = list(range(1, max_ports + 1))
+
         log.debug(f'[{self.ip}] switch object created')
 
     class UnavailableError(Exception):
