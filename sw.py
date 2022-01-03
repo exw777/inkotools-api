@@ -145,7 +145,7 @@ class Switch:
                 log.warning(f"Can't get mac for {self.ip}, using: {self.mac}")
 
         # get max ports from switch model and set transit and access ports
-        max_ports = re.findall(r'(?s:.*)(\d{2})(?s:.*$)', self.model)
+        max_ports = re.findall(r'(?:.*)(\d{2})(?:.*$)', self.model)
         if max_ports:
             max_ports = int(max_ports[0])
         self.access_ports = []
