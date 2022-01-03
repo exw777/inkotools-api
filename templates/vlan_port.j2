@@ -1,0 +1,38 @@
+{# manage port vlans of access switches -#}
+{# params: sw, port, vid, action -#}
+{% if vid is not defined -%}{%- set vid = None -%}{%- endif -%}
+{%- if action is not defined -%}{%- set action = None -%}{%- endif -%}
+{%- if port is defined -%}
+    {%- if sw.model == 'QSW-2800-28T-AC' -%}
+        {%- if action not in ['tag', 'untag', 'delete'] -%}
+            sh switchport interface ethernet 1/{{ port }}
+        {%- elif vid -%}
+{#- TODO: checking port mode: trunk, access, hybrid -#}
+conf t
+    interface ethernet 1/{{ port }}
+            {%- if port in sw.access_ports -%}
+                {%- if action == 'untag' +%}
+        switchport access vlan {{ vid }}
+                {%- elif action == 'delete' +%}
+        no switchport access vlan
+                {%- endif -%}
+            {%- elif port in sw.transit_ports +%}
+        switchport trunk
+                {%- if action == 'untag' +%} native vlan {{ vid }}
+                {%- elif action == 'tag' +%} allowed vlan add {{ vid }}
+                {%- elif action == 'delete' +%} allowed vlan remove {{ vid }}
+                {%- endif -%}
+            {%- endif +%}
+    exit 
+end
+        {%- endif -%}
+    {%- elif 'DES' in sw.model or sw.model in ['DGS-1210-28X/ME/B1', 'DGS-3000-26TC'] -%}
+        {%- if vid == 1 -%}{%- set vid = 'default' -%}{%- endif -%}
+        {%- if action not in ['tag', 'untag', 'delete'] -%}
+            show vlan port {{ port }}
+        {%- elif vid -%}
+            config vlan {{ vid }}
+            {%- if action != 'delete' +%} add{%+ endif +%} {{ action }} {{ port }}
+        {%- endif -%}
+    {%- endif -%}
+{%- endif -%}

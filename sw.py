@@ -519,7 +519,7 @@ class Switch:
                                       r.group('ports'))
                 tagged = re.findall(r'Ethernet1/(\d+)\(T\)(?:\s|$)\s*',
                                     r.group('ports'))
-                result.append({'vid': vid,
+                result.append({'vid': int(vid),
                                'tagged': tagged,
                                'untagged': untagged})
         else:
@@ -531,7 +531,7 @@ class Switch:
                 vid = r.group('vid')
                 tagged = interval_to_list(r.group('tagged'))
                 untagged = interval_to_list(r.group('untagged'))
-                result.append({'vid': vid,
+                result.append({'vid': int(vid),
                                'tagged': tagged,
                                'untagged': untagged})
         return result
@@ -593,6 +593,173 @@ class Switch:
         """Delete vlans from switch"""
         for vid in vid_list:
             self.delete_vlan(vid)
+
+    def get_vlan_port(self, port):
+        """Get vlan information from port
+
+        Returns: dict:
+
+            {'untagged': int,
+            'tagged': [int,...]}
+
+            False - on error with several untagged vlans
+            """
+        try:
+            result_raw = self.send(template='vlan_port.j2', port=port)
+        except Exception as e:
+            log.error(f'[{self.ip}] get vlan port error: {e}')
+            return None
+        if not result_raw:
+            return None
+        tagged = []
+        untagged = []
+        if re.search('QSW', self.model):
+            regex = (
+                r'Port VID :(?P<u>\d+)(?:\s+|$)'
+                r'(?:.*(?:Trunk|tag) allowed Vlan: (?P<t>[-;0-9]+))?'
+            )
+            r = re.search(regex, result_raw)
+            untagged.append(int(r.group('u')))
+            if r.group('t'):
+                t = r.group('t').replace(';', ',')
+                tagged = interval_to_list(t)
+        else:
+            regex = (
+                r'\s+(?P<vid>\d+)(?:\s+(?P<u>[-X])\s+(?P<t>[-X])).*'
+            )
+            for r in re.finditer(regex, result_raw):
+                if r.group('u') == 'X':
+                    untagged.append(int(r.group('vid')))
+                if r.group('t') == 'X':
+                    tagged.append(int(r.group('vid')))
+        # try to workaround common situation:
+        # double vlan on access port and one of them is default (vid 1)
+        if (
+            len(untagged) == 2
+            and 1 in untagged
+            and port in self.access_ports
+        ):
+            tmp = set(untagged)
+            tmp.remove(1)
+            untagged = list(tmp)
+            log.warning(
+                f'[{self.ip}] Check configuration! Ignoring vid 1 '
+                f'with double untagged vlan on access port {port}'
+            )
+        # check for several untagged vlans and raise error
+        if len(untagged) > 1:
+            log.error(
+                f'[{self.ip}] several untagged vlans on one port! '
+                f'port {port}, vlans: {untagged}'
+            )
+            return False
+        elif untagged:
+            untagged = int(untagged[0])
+        else:
+            untagged = None
+
+        return {'untagged': untagged, 'tagged': tagged}
+
+    def add_vlan_port(self, port, vid, tag=False, force=False):
+        """Add tagged/untagged vlan to port
+
+        TODO: write description
+        """
+
+        # simple checks
+        if (
+            not vid in range(1, 4095)
+            or not port in (self.access_ports + self.transit_ports)
+        ):
+            log.error(f'Port {port} or vid {vid} out of range')
+            return False
+
+        # check if vid exists on switch
+        if not vid in self.get_vlan_list():
+            if not force:
+                log.error(
+                    f'[{self.ip}] vlan {vid} does not exist. '
+                    'Create it first or use `force=True` parameter.')
+                return False
+            else:
+                # force create vlan before adding to port
+                if not self.add_vlan(vid=vid):
+                    return False
+
+        cur_vlans = self.get_vlan_port(port=port)
+        if not cur_vlans:
+            log.error(f'[{self.ip}:{port}] failed to get vlans from port')
+            return False
+
+        if (
+            (vid == cur_vlans['untagged'] and not tag)
+            or (vid in cur_vlans['tagged'] and tag)
+        ):
+            log.info(
+                f'[{self.ip}:{port}] vlan {vid} already set. Skipping.')
+            return True
+
+        if vid == 1 and port in self.access_ports:
+            log.error(
+                'VID 1 on access port is probably not what you wanted')
+            return False
+
+        if not tag and port in self.transit_ports and vid != 1:
+            log.error(
+                'Untagged vlan on transit port is probably not what you wanted')
+            return False
+
+        if not tag and cur_vlans['untagged']:
+            if not force:
+                log.error(
+                    f'[{self.ip}:{port}] Untagged port overlapping. '
+                    f"Remove vlan {cur_vlans['untagged']} first, "
+                    'or use `force=True` parameter to replace')
+                return False
+            else:
+                # if force - delete old vlan before adding new
+                if not self.delete_vlan_port(port=port, vid=vid):
+                    log.error(
+                        f'[{self.ip}:{port}] failed to replace vlan {vid}')
+                    return False
+        # send commands to switch
+        if tag:
+            action = 'tag'
+        else:
+            action = 'untag'
+        try:
+            result = self.send(template='vlan_port.j2',
+                               port=port, vid=vid, action=action)
+        except Exception as e:
+            log.error(
+                f'[{self.ip}:{port}] add {action} vlan {vid} error: {e}')
+            return False
+        if not (re.search('Success', result) or result == ''):
+            log.error(
+                f'[{self.ip}:{port}] add {action} vlan {vid} failed: {result}')
+            return False
+        else:
+            log.info(f'[{self.ip}:{port}] {action} vlan {vid} added')
+            return True
+
+    def delete_vlan_port(self, port, vid):
+        """Delete vlan from port"""
+
+        # TODO: checks
+        try:
+            result = self.send(template='vlan_port.j2',
+                               port=port, vid=vid, action='delete')
+        except Exception as e:
+            log.error(
+                f'[{self.ip}:{port}] delete vlan {vid} error: {e}')
+            return False
+        if not (re.search('Success', result) or result == ''):
+            log.error(
+                f'[{self.ip}:{port}] delete vlan {vid} failed: {result}')
+            return False
+        else:
+            log.info(f'[{self.ip}:{port}] vlan {vid} deleted')
+            return True
 
 
 def ping(ip):
