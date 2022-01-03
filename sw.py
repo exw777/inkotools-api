@@ -512,12 +512,12 @@ class Switch:
         if re.search('QSW', self.model):
             result_raw = result_raw.replace('\x08', '').replace('-', '')
             regex = (r'\n(?P<vid>\d+)\s+(?:.*Static.*?)'
-                     r'(?P<ports>(?:\s+Ethernet.*\s+\r)+)')
+                     r'(?P<ports>(?:\s+Ethernet.*(?:\s+\r|$))+)')
             for r in re.finditer(regex, result_raw):
                 vid = r.group('vid')
-                untagged = re.findall(r'Ethernet1/(\d+)\s+',
+                untagged = re.findall(r'Ethernet1/(\d+)(?:\s|$)\s*',
                                       r.group('ports'))
-                tagged = re.findall(r'Ethernet1/(\d+)\(T\)\s+',
+                tagged = re.findall(r'Ethernet1/(\d+)\(T\)(?:\s|$)\s*',
                                     r.group('ports'))
                 result.append({'vid': vid,
                                'tagged': tagged,
