@@ -510,8 +510,9 @@ class Switch:
             return None
         result = []
         if re.search('QSW', self.model):
-            regex = (r'\n(?P<vid>\d+)\s+(?:.*?)'
-                     r'(?P<ports>(?:\s+Ethernet.*\s+\r\n)+)')
+            result_raw = result_raw.replace('\x08', '').replace('-', '')
+            regex = (r'\n(?P<vid>\d+)\s+(?:.*Static.*?)'
+                     r'(?P<ports>(?:\s+Ethernet.*\s+\r)+)')
             for r in re.finditer(regex, result_raw):
                 vid = r.group('vid')
                 untagged = re.findall(r'Ethernet1/(\d+)\s+',
