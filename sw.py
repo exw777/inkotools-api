@@ -542,6 +542,11 @@ class Switch:
 
     def add_vlan(self, vid):
         """Add new vlan to switch"""
+
+        # check vid is valid
+        if not vid in range(1, 4095):
+            log.error(f'[{self.ip}] vid {vid} out of range')
+            return False
         check_vlan = self.get_vlan(vid=vid)
         if check_vlan:
             log.error(f'[{self.ip}] vlan {vid} already exists')
@@ -567,15 +572,23 @@ class Switch:
         for vid in vid_list:
             self.add_vlan(vid)
 
-    def delete_vlan(self, vid):
+    def delete_vlan(self, vid, force=False):
         """Delete vlan from switch"""
+        if vid == 1:
+            log.error('Cannot delete vid 1')
         check_vlan = self.get_vlan(vid=vid)
         if check_vlan == None:
             log.error(f'[{self.ip}] vlan check failed (wrong model?)')
             return False
         elif check_vlan == []:
-            log.error(f'[{self.ip}] vlan {vid} does not exists')
+            log.info(f'[{self.ip}] vlan {vid} does not exists. Skipping')
+            return True
+        if check_vlan[0]['untagged'] and not force:
+            log.error(f'[{self.ip}] vlan {vid} is set untagged on ports: '
+                      f"{check_vlan[0]['untagged']} Skipping. "
+                      'Use `force=True` if you are really want to delete it.')
             return False
+
         try:
             result = self.send(template='vlan.j2',
                                vid=vid, action='delete')
@@ -599,11 +612,18 @@ class Switch:
 
         Returns: dict:
 
-            {'untagged': int,
+            {'port': int,
+            'untagged': int,
             'tagged': [int,...]}
 
             False - on error with several untagged vlans
             """
+
+        # check port is valid
+        if port and not port in (self.access_ports + self.transit_ports):
+            log.error(f'[{self.ip}] port {port} out of range')
+            return False
+
         try:
             result_raw = self.send(template='vlan_port.j2', port=port)
         except Exception as e:
@@ -658,39 +678,56 @@ class Switch:
         else:
             untagged = None
 
-        return {'untagged': untagged, 'tagged': tagged}
+        return {'port': port, 'untagged': untagged, 'tagged': tagged}
 
-    def add_vlan_port(self, port, vid, tag=False, force=False):
+    def get_vlan_ports(self, ports=[]):
+        """Get vlan on several ports
+
+        ports - if ommited, all ports are used"""
+
+        if not ports:
+            ports = self.access_ports+self.transit_ports
+
+        result = []
+        for port in ports:
+            result.append(self.get_vlan_port(port=port))
+
+        return result
+
+    def add_vlan_port(self, port, vid, tag=False,
+                      force_create=False,
+                      force_replace=False,
+                      unsafe=False):
         """Add tagged/untagged vlan to port
 
-        TODO: write description
-        """
+        port   (int)  - switch port
+        vid    (int)  - vlan id
+        tag   (bool)  - if True, set vlan tagged. Default False (untagged)
 
-        # simple checks
-        if (
-            not vid in range(1, 4095)
-            or not port in (self.access_ports + self.transit_ports)
-        ):
-            log.error(f'Port {port} or vid {vid} out of range')
-            return False
+        force flags (default: False):
 
-        # check if vid exists on switch
-        if not vid in self.get_vlan_list():
-            if not force:
-                log.error(
-                    f'[{self.ip}] vlan {vid} does not exist. '
-                    'Create it first or use `force=True` parameter.')
-                return False
-            else:
-                # force create vlan before adding to port
-                if not self.add_vlan(vid=vid):
-                    return False
+        force_create  - adding non-existing vlan,
+        force_replace - replacing untagged vlan,
+        unsafe        - skipping some safety checks."""
 
+        # get current vlans from port for some checks
         cur_vlans = self.get_vlan_port(port=port)
         if not cur_vlans:
             log.error(f'[{self.ip}:{port}] failed to get vlans from port')
             return False
-
+        # check if vid exists on switch
+        if not vid in self.get_vlan_list():
+            if not force_create:
+                log.error(
+                    f'[{self.ip}] vlan {vid} does not exist. '
+                    'Create it first or use `force_create=True` parameter.')
+                return False
+            else:
+                # force create vlan before adding to port
+                if not self.add_vlan(vid=vid):
+                    log.error(f'[{self.ip}] force create vlan {vid} failed.')
+                    return False
+        # check if vlan already added
         if (
             (vid == cur_vlans['untagged'] and not tag)
             or (vid in cur_vlans['tagged'] and tag)
@@ -698,27 +735,33 @@ class Switch:
             log.info(
                 f'[{self.ip}:{port}] vlan {vid} already set. Skipping.')
             return True
-
-        if vid == 1 and port in self.access_ports:
+        # check adding vid 1 to access port
+        if vid == 1 and port in self.access_ports and not unsafe:
             log.error(
-                'VID 1 on access port is probably not what you wanted')
+                'VID 1 on access port is probably not what you wanted. '
+                'Use `unsafe=True` parameter to skip this check.')
             return False
-
-        if not tag and port in self.transit_ports and vid != 1:
+        # check adding untagged vlan to transit port
+        if not tag and port in self.transit_ports and vid != 1 and not unsafe:
             log.error(
-                'Untagged vlan on transit port is probably not what you wanted')
+                'Untagged vlan on transit port is probably not what you '
+                'wanted. Use `unsafe=True` parameter to skip this check.')
             return False
-
+        # check overlapping untagged ports
         if not tag and cur_vlans['untagged']:
-            if not force:
+            # q-tech workaround (vid 1 when no access vlan on port)
+            if re.search('QSW', self.model) and cur_vlans['untagged'] == 1:
+                pass
+            elif not force_replace:
                 log.error(
                     f'[{self.ip}:{port}] Untagged port overlapping. '
                     f"Remove vlan {cur_vlans['untagged']} first, "
-                    'or use `force=True` parameter to replace')
+                    'or use `force_replace=True` parameter to replace')
                 return False
             else:
                 # if force - delete old vlan before adding new
-                if not self.delete_vlan_port(port=port, vid=vid):
+                if not self.delete_vlan_port(
+                        port=port, vid=cur_vlans['untagged']):
                     log.error(
                         f'[{self.ip}:{port}] failed to replace vlan {vid}')
                     return False
@@ -734,7 +777,7 @@ class Switch:
             log.error(
                 f'[{self.ip}:{port}] add {action} vlan {vid} error: {e}')
             return False
-        if not (re.search('Success', result) or result == ''):
+        if not (re.search(r'[Ss]uccess', result) or result == ''):
             log.error(
                 f'[{self.ip}:{port}] add {action} vlan {vid} failed: {result}')
             return False
@@ -742,10 +785,29 @@ class Switch:
             log.info(f'[{self.ip}:{port}] {action} vlan {vid} added')
             return True
 
-    def delete_vlan_port(self, port, vid):
-        """Delete vlan from port"""
+    def delete_vlan_port(self, port, vid, unsafe=False):
+        """Delete vlan from port
 
-        # TODO: checks
+        unsafe - skip check of vid 1 deleting from transit ports"""
+
+        # get current vlans from port for some checks
+        cur_vlans = self.get_vlan_port(port=port)
+        if not cur_vlans:
+            log.error(f'[{self.ip}:{port}] failed to get vlans from port')
+            return False
+        # check if vlan already deleted
+        if not (vid == cur_vlans['untagged'] or vid in cur_vlans['tagged']):
+            log.info(
+                f'[{self.ip}:{port}] vlan {vid} not set on port. Skipping.')
+            return True
+        # check deleting vid 1 from transit port
+        if vid == 1 and port in self.transit_ports and not unsafe:
+            log.error(
+                'Attention! Removing vid 1 from transit port may cause '
+                'disconnection from switch and make it unavailable! '
+                'Use `unsafe=True` parameter if you really want to do this.')
+            return False
+        # send commands
         try:
             result = self.send(template='vlan_port.j2',
                                port=port, vid=vid, action='delete')
@@ -753,13 +815,89 @@ class Switch:
             log.error(
                 f'[{self.ip}:{port}] delete vlan {vid} error: {e}')
             return False
-        if not (re.search('Success', result) or result == ''):
+        if not (re.search(r'[Ss]uccess', result) or result == ''):
             log.error(
                 f'[{self.ip}:{port}] delete vlan {vid} failed: {result}')
             return False
         else:
             log.info(f'[{self.ip}:{port}] vlan {vid} deleted')
             return True
+
+    def add_vlans_ports(self, ports, vid_list,
+                        force_untagged=False, force_create=False):
+        """Add tagged vlans to ports
+
+        ports    (list of int) - list of ports
+        vid_list (list of int) - list of vlan id
+        force_untagged  (bool) - replace existing untagged to tagged.
+        force_create    (bool) - create vlan if not exists."""
+
+        # if only one port in args
+        if isinstance(ports, int):
+            ports = [ports]
+
+        for port in ports:
+            # get current vlans from port for some checks
+            cur_vlans = self.get_vlan_port(port=port)
+            if not cur_vlans:
+                log.error(f'[{self.ip}:{port}] failed to get vlans from port')
+                # skip current port on error
+                continue
+            # vlan processing
+            for vid in vid_list:
+                if vid == cur_vlans['untagged'] and not force_untagged:
+                    log.warning(
+                        f'[{self.ip}:{port}] vlan {vid} already set untagged. '
+                        'Skipping. Use `force_untagged=True` to replace.')
+                elif vid in cur_vlans['tagged']:
+                    log.info(
+                        f'[{self.ip}:{port}] vlan {vid} already set. Skipping')
+                else:
+                    self.add_vlan_port(port=port, vid=vid, tag=True,
+                                       force_create=force_create)
+
+    def delete_vlans_ports(self, ports, vid_list=[], force_untagged=False):
+        """Delete tagged vlans from ports
+
+        ports           - list of ports or one port in int
+        vid_list        - if ommited, all vlans will be deleted from port
+        force_untagged  - delete also untagged vlan (default: False)
+        """
+
+        # if only one port in args
+        if isinstance(ports, int):
+            ports = [ports]
+
+        for port in ports:
+            # get current vlans from port for some checks
+            cur_vlans = self.get_vlan_port(port=port)
+            if not cur_vlans:
+                log.error(f'[{self.ip}:{port}] failed to get vlans from port')
+                # skip current port on error
+                continue
+            # delete all vlans on empty list
+            if vid_list:
+                del_list = vid_list
+            else:
+                del_list = cur_vlans['tagged']
+                if cur_vlans['untagged']:
+                    del_list.append(cur_vlans['untagged'])
+
+            # vlan processing
+            for vid in del_list:
+                if vid == cur_vlans['untagged'] and not force_untagged:
+                    log.warning(
+                        f'[{self.ip}:{port}] vlan {vid} is untagged. '
+                        'Skipping. Use `force_untagged=True` to delete.')
+                elif not vid in cur_vlans['tagged']:
+                    log.info(
+                        f'[{self.ip}:{port}] no vlan {vid} on port. Skipping')
+                else:
+                    self.delete_vlan_port(port=port, vid=vid)
+
+
+########################################################################
+# common functions
 
 
 def ping(ip):
