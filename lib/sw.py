@@ -70,6 +70,10 @@ class Switch:
 
         ip: Any format of IP address, supported by netaddr.
         """
+
+        # logger with ip name
+        self.log = logging.getLogger(ip)
+
         # set ip address
         self.ip = netaddr.IPAddress(ip)
 
@@ -106,7 +110,8 @@ class Switch:
             self.mgmt_ip = self.ip
 
         if not self.mgmt_ip in NETS:
-            log.warning(f'Address {self.ip} is out of inkotel switches range')
+            self.log.warning(
+                f'Address {self.ip} is out of inkotel switches range')
 
         # set mac address
         # first, try via arp, second via snmp
@@ -142,7 +147,8 @@ class Switch:
                         self.mac = netaddr.EUI((int(self.mac)-1))
             else:
                 self.mac = netaddr.EUI(0)
-                log.warning(f"Can't get mac for {self.ip}, using: {self.mac}")
+                self.log.warning(
+                    f"Can't get mac for {self.ip}, using: {self.mac}")
 
         # get max ports from switch model and set transit and access ports
         max_ports = re.findall(r'(?:.*)(\d{2})(?:.*$)', self.model)
@@ -160,7 +166,7 @@ class Switch:
             else:
                 self.transit_ports = list(range(1, max_ports + 1))
 
-        log.debug(f'[{self.ip}] switch object created')
+        self.log.debug(f'switch object created')
 
     class UnavailableError(Exception):
         """Custom exception when switch is not available"""
@@ -201,7 +207,7 @@ class Switch:
 
         # HARDCODE: huawey is restricted for telnet connection
         if self.model == 'S5328C-EI-24S':
-            log.error(f'huawey is restricted for telnet connection')
+            self.log.error(f'huawey is restricted for telnet connection')
             return None
 
         # check that connection is not established
@@ -238,29 +244,29 @@ class Switch:
             tn.send(creds['password']+'\r')
             # asking login again - wrong password
             if tn.expect([prompt, 'ame:|in:']) == 1:
-                log.critical('Wrong password!')
+                self.log.critical('Wrong password!')
                 exit(f"Verify contents of 'secrets.yml' and try again.")
             else:
                 # calculate full prompt-line for further usage
                 self._prompt = tn.before.split()[-1] + prompt
 
             self._connection = tn
-            log.debug(f'[{self.ip}] new telnet connection')
+            self.log.debug(f'new telnet connection')
         else:
-            log.debug(f'[{self.ip}] telnet already connected')
+            self.log.debug(f'telnet already connected')
         return self._connection
 
     def _close_telnet(self):
         """Close telnet connection"""
         if hasattr(self, '_connection'):
             self._connection.close()
-            log.debug(f'[{self.ip}] telnet connection closed')
+            self.log.debug(f'telnet connection closed')
 
     def interact(self):
         """Interact with switch via telnet"""
         tn = self._telnet()
         if not tn:
-            log.debug('telnet object is empty')
+            self.log.debug('telnet object is empty')
             return None
         print(self.show())
         # set terminal title
@@ -284,29 +290,29 @@ class Switch:
         """
 
         if template:
-            log.debug(f'template: {template}')
-            log.debug(f'kwargs: {kwargs}')
+            self.log.debug(f'template: {template}')
+            self.log.debug(f'kwargs: {kwargs}')
             try:
                 commands = j2.get_template(template).render(sw=self, **kwargs)
             except Exception as e:
-                log.error(f'Template {template} loading error: {str(e)}')
+                self.log.error(f'Template {template} loading error: {str(e)}')
 
         # exit on empty commands
         if not commands:
-            log.warning(f'[{self.ip}] empty commands list')
+            self.log.warning(f'empty commands list')
             return None
 
-        log.debug(f'raw commands: {commands}')
+        self.log.debug(f'raw commands: {commands}')
 
         # if commands are plain text, split it to list, and trim extra spaces
         if type(commands) is not list:
             commands = list(
                 map(str.strip, commands.replace('\n', ';').split(';')))
-            log.debug(f'converted commands: {commands}')
+            self.log.debug(f'converted commands: {commands}')
 
         tn = self._telnet()
         if not tn:
-            log.debug('telnet object is empty')
+            self.log.debug('telnet object is empty')
             return None
 
         output = ''
@@ -314,7 +320,7 @@ class Switch:
             # skip empty commands
             if not cmd:
                 continue
-            log.debug(f'command: {cmd}')
+            self.log.debug(f'command: {cmd}')
             tn.sendline(cmd)
             # gpon doesn't work without next line
             if re.search(r'GEPON|LTP-8X', self.model):
@@ -352,7 +358,7 @@ class Switch:
                     break
                 else:
                     tn.send(send_key)
-            log.debug(f'output: {cmd_out}')
+            self.log.debug(f'output: {cmd_out}')
             output += cmd_out
 
         # return result of commands
@@ -361,7 +367,7 @@ class Switch:
     def __del__(self):
         # close telnet connection on class destruction
         self._close_telnet()
-        log.debug(f'[{self.ip}] switch object destroyed')
+        self.log.debug(f'switch object destroyed')
 
     def backup(self, **kwargs):
         """Backup via tftp
@@ -379,15 +385,15 @@ class Switch:
         try:
             result = self.send(template='backup.j2', **kwargs)
         except Exception as e:
-            log.error(f'[{self.ip}] backup error: {e}')
+            self.log.error(f'backup error: {e}')
             return None
         end = time() - start
         r = r' successful|Success|finished|complete|Upload configuration.*Done'
         if result and re.search(r, result):
-            log.info(f'[{self.ip}] backup sent in {end:.2f}s')
+            self.log.info(f'backup sent in {end:.2f}s')
             return True
         else:
-            log.error(f'[{self.ip}] backup result is: {result}')
+            self.log.error(f'backup result is: {result}')
             return result
 
     def save(self):
@@ -396,15 +402,15 @@ class Switch:
         try:
             result = self.send(template='save.j2')
         except Exception as e:
-            log.error(f'[{self.ip}] saving error: {e}')
+            self.log.error(f'saving error: {e}')
             return None
         end = time() - start
         r = r'Done|Success|OK| success'
         if result and re.search(r, result):
-            log.info(f'[{self.ip}] saved in {end:.2f}s')
+            self.log.info(f'saved in {end:.2f}s')
             return True
         else:
-            log.error(f'[{self.ip}] wrong saving result: {result}')
+            self.log.error(f'wrong saving result: {result}')
             return result
 
     def get_acl(self, port=None):
@@ -415,7 +421,7 @@ class Switch:
         try:
             result = self.send(template='acl.j2', port=port)
         except Exception as e:
-            log.error(f'[{self.ip}] get acl error: {e}')
+            self.log.error(f'get acl error: {e}')
             return None
         if not result:
             return None
@@ -435,14 +441,14 @@ class Switch:
         for i in result:
             if 'mask' in i.keys() and i['mask'] \
                     and i['mask'] != '255.255.255.255':
-                log.warning(f"[{self.ip}] port {i['port']} acl {i['ip']}"
-                            f" has non-standard mask: {i['mask']}")
+                self.log.warning(f"port {i['port']} acl {i['ip']}"
+                                 f" has non-standard mask: {i['mask']}")
         # check if there are several acl for one port
         ports = list(map(lambda x: x['port'], result))
         for p in set(ports):
             cnt = ports.count(p)
             if cnt > 1:
-                log.warning(f'[{self.ip}] port {p} has {cnt} acl rules')
+                self.log.warning(f'port {p} has {cnt} acl rules')
         return result
 
     def add_acl(self, port, ip):
@@ -450,10 +456,10 @@ class Switch:
         try:
             result = self.send(template='acl.j2', port=port, ip=ip)
         except Exception as e:
-            log.error(f'[{self.ip}] add acl error: {e}')
+            self.log.error(f'add acl error: {e}')
             return False
         if re.search(r'ERROR|[Ff]ail', result):
-            log.error(f'[{self.ip}] failed to add acl {ip} port {port}')
+            self.log.error(f'failed to add acl {ip} port {port}')
             return False
         else:
             return True
@@ -463,10 +469,10 @@ class Switch:
         try:
             result = self.send(template='acl.j2', port=port, ip=None)
         except Exception as e:
-            log.error(f'[{self.ip}] delete acl error: {e}')
+            self.log.error(f'delete acl error: {e}')
             return False
         if re.search(r'ERROR|[Ff]ail', result):
-            log.error(f'[{self.ip}] failed to delete acl {ip} port {port}')
+            self.log.error(f'failed to delete acl {ip} port {port}')
             return False
         else:
             return True
@@ -481,10 +487,10 @@ class Switch:
         try:
             result = self.send(template='acl.j2', port=port, ip=ip)
         except Exception as e:
-            log.error(f'[{self.ip}] set acl error: {e}')
+            self.log.error(f'set acl error: {e}')
             return False
         if re.search(r'ERROR|[Ff]ail', result):
-            log.error(f'[{self.ip}] failed to set acl {ip} port {port}')
+            self.log.error(f'failed to set acl {ip} port {port}')
             return False
         else:
             return True
@@ -504,7 +510,7 @@ class Switch:
         try:
             result_raw = self.send(template='vlan.j2', vid=vid)
         except Exception as e:
-            log.error(f'[{self.ip}] get vlan error: {e}')
+            self.log.error(f'get vlan error: {e}')
             return None
         if not result_raw:
             return None
@@ -545,26 +551,26 @@ class Switch:
 
         # check vid is valid
         if not vid in range(1, 4095):
-            log.error(f'[{self.ip}] vid {vid} out of range')
+            self.log.error(f'vid {vid} out of range')
             return False
         check_vlan = self.get_vlan(vid=vid)
         if check_vlan:
-            log.error(f'[{self.ip}] vlan {vid} already exists')
+            self.log.error(f'vlan {vid} already exists')
             return False
         elif check_vlan == None:
-            log.error(f'[{self.ip}] vlan check failed (wrong model?)')
+            self.log.error(f'vlan check failed (wrong model?)')
             return False
         try:
             result = self.send(template='vlan.j2',
                                vid=vid, action='add')
         except Exception as e:
-            log.error(f'[{self.ip}] create vlan {vid} error: {e}')
+            self.log.error(f'create vlan {vid} error: {e}')
             return False
         if not (re.search('Success', result) or result == ''):
-            log.error(f'[{self.ip}] create vlan {vid} failed: {result}')
+            self.log.error(f'create vlan {vid} failed: {result}')
             return False
         else:
-            log.info(f'[{self.ip}] created vlan {vid}')
+            self.log.info(f'created vlan {vid}')
             return True
 
     def add_vlans(self, vid_list):
@@ -575,31 +581,32 @@ class Switch:
     def delete_vlan(self, vid, force=False):
         """Delete vlan from switch"""
         if vid == 1:
-            log.error('Cannot delete vid 1')
+            self.log.error('Cannot delete vid 1')
         check_vlan = self.get_vlan(vid=vid)
         if check_vlan == None:
-            log.error(f'[{self.ip}] vlan check failed (wrong model?)')
+            self.log.error(f'vlan check failed (wrong model?)')
             return False
         elif check_vlan == []:
-            log.info(f'[{self.ip}] vlan {vid} does not exists. Skipping')
+            self.log.info(f'vlan {vid} does not exists. Skipping')
             return True
         if check_vlan[0]['untagged'] and not force:
-            log.error(f'[{self.ip}] vlan {vid} is set untagged on ports: '
-                      f"{check_vlan[0]['untagged']} Skipping. "
-                      'Use `force=True` if you are really want to delete it.')
+            self.log.error(
+                f'vlan {vid} is set untagged on ports: '
+                f"{check_vlan[0]['untagged']} Skipping. "
+                'Use `force=True` if you are really want to delete it.')
             return False
 
         try:
             result = self.send(template='vlan.j2',
                                vid=vid, action='delete')
         except Exception as e:
-            log.error(f'[{self.ip}] delete vlan {vid} error: {e}')
+            self.log.error(f'delete vlan {vid} error: {e}')
             return False
         if not (re.search('Success', result) or result == ''):
-            log.error(f'[{self.ip}] delete vlan {vid} failed: {result}')
+            self.log.error(f'delete vlan {vid} failed: {result}')
             return False
         else:
-            log.info(f'[{self.ip}] deleted vlan {vid}')
+            self.log.info(f'deleted vlan {vid}')
             return True
 
     def delete_vlans(self, vid_list):
@@ -621,13 +628,13 @@ class Switch:
 
         # check port is valid
         if port and not port in (self.access_ports + self.transit_ports):
-            log.error(f'[{self.ip}] port {port} out of range')
+            self.log.error(f'port {port} out of range')
             return False
 
         try:
             result_raw = self.send(template='vlan_port.j2', port=port)
         except Exception as e:
-            log.error(f'[{self.ip}] get vlan port error: {e}')
+            self.log.error(f'get vlan port error: {e}')
             return None
         if not result_raw:
             return None
@@ -662,14 +669,14 @@ class Switch:
             tmp = set(untagged)
             tmp.remove(1)
             untagged = list(tmp)
-            log.warning(
-                f'[{self.ip}] Check configuration! Ignoring vid 1 '
+            self.log.warning(
+                f'Check configuration! Ignoring vid 1 '
                 f'with double untagged vlan on access port {port}'
             )
         # check for several untagged vlans and raise error
         if len(untagged) > 1:
-            log.error(
-                f'[{self.ip}] several untagged vlans on one port! '
+            self.log.error(
+                f'several untagged vlans on one port! '
                 f'port {port}, vlans: {untagged}'
             )
             return False
@@ -713,37 +720,37 @@ class Switch:
         # get current vlans from port for some checks
         cur_vlans = self.get_vlan_port(port=port)
         if not cur_vlans:
-            log.error(f'[{self.ip}:{port}] failed to get vlans from port')
+            self.log.error(f'failed to get vlans from port {port}')
             return False
         # check if vid exists on switch
         if not vid in self.get_vlan_list():
             if not force_create:
-                log.error(
-                    f'[{self.ip}] vlan {vid} does not exist. '
+                self.log.error(
+                    f'vlan {vid} does not exist. '
                     'Create it first or use `force_create=True` parameter.')
                 return False
             else:
                 # force create vlan before adding to port
                 if not self.add_vlan(vid=vid):
-                    log.error(f'[{self.ip}] force create vlan {vid} failed.')
+                    self.log.error(f'force create vlan {vid} failed.')
                     return False
         # check if vlan already added
         if (
             (vid == cur_vlans['untagged'] and not tag)
             or (vid in cur_vlans['tagged'] and tag)
         ):
-            log.info(
-                f'[{self.ip}:{port}] vlan {vid} already set. Skipping.')
+            self.log.info(
+                f'vlan {vid} already set on port {port}. Skipping.')
             return True
         # check adding vid 1 to access port
         if vid == 1 and port in self.access_ports and not unsafe:
-            log.error(
+            self.log.error(
                 'VID 1 on access port is probably not what you wanted. '
                 'Use `unsafe=True` parameter to skip this check.')
             return False
         # check adding untagged vlan to transit port
         if not tag and port in self.transit_ports and vid != 1 and not unsafe:
-            log.error(
+            self.log.error(
                 'Untagged vlan on transit port is probably not what you '
                 'wanted. Use `unsafe=True` parameter to skip this check.')
             return False
@@ -753,8 +760,8 @@ class Switch:
             if re.search('QSW', self.model) and cur_vlans['untagged'] == 1:
                 pass
             elif not force_replace:
-                log.error(
-                    f'[{self.ip}:{port}] Untagged port overlapping. '
+                self.log.error(
+                    f'Untagged vlan overlapping on port {port}. '
                     f"Remove vlan {cur_vlans['untagged']} first, "
                     'or use `force_replace=True` parameter to replace')
                 return False
@@ -762,8 +769,8 @@ class Switch:
                 # if force - delete old vlan before adding new
                 if not self.delete_vlan_port(
                         port=port, vid=cur_vlans['untagged']):
-                    log.error(
-                        f'[{self.ip}:{port}] failed to replace vlan {vid}')
+                    self.log.error(
+                        f'failed to replace vlan {vid} on port {port}')
                     return False
         # send commands to switch
         if tag:
@@ -774,15 +781,15 @@ class Switch:
             result = self.send(template='vlan_port.j2',
                                port=port, vid=vid, action=action)
         except Exception as e:
-            log.error(
-                f'[{self.ip}:{port}] add {action} vlan {vid} error: {e}')
+            self.log.error(
+                f'add {action} vlan {vid} on port {port} error: {e}')
             return False
         if not (re.search(r'[Ss]uccess', result) or result == ''):
-            log.error(
-                f'[{self.ip}:{port}] add {action} vlan {vid} failed: {result}')
+            self.log.error(
+                f'add {action} vlan {vid} on port {port} failed: {result}')
             return False
         else:
-            log.info(f'[{self.ip}:{port}] {action} vlan {vid} added')
+            self.log.info(f'{action} vlan {vid} added on port {port}')
             return True
 
     def delete_vlan_port(self, port, vid, unsafe=False):
@@ -793,16 +800,16 @@ class Switch:
         # get current vlans from port for some checks
         cur_vlans = self.get_vlan_port(port=port)
         if not cur_vlans:
-            log.error(f'[{self.ip}:{port}] failed to get vlans from port')
+            self.log.error(f'failed to get vlans from port {port}')
             return False
         # check if vlan already deleted
         if not (vid == cur_vlans['untagged'] or vid in cur_vlans['tagged']):
-            log.info(
-                f'[{self.ip}:{port}] vlan {vid} not set on port. Skipping.')
+            self.log.info(
+                f'vlan {vid} not set on port {port}. Skipping.')
             return True
         # check deleting vid 1 from transit port
         if vid == 1 and port in self.transit_ports and not unsafe:
-            log.error(
+            self.log.error(
                 'Attention! Removing vid 1 from transit port may cause '
                 'disconnection from switch and make it unavailable! '
                 'Use `unsafe=True` parameter if you really want to do this.')
@@ -812,15 +819,15 @@ class Switch:
             result = self.send(template='vlan_port.j2',
                                port=port, vid=vid, action='delete')
         except Exception as e:
-            log.error(
-                f'[{self.ip}:{port}] delete vlan {vid} error: {e}')
+            self.log.error(
+                f'delete vlan {vid} port {port} error: {e}')
             return False
         if not (re.search(r'[Ss]uccess', result) or result == ''):
-            log.error(
-                f'[{self.ip}:{port}] delete vlan {vid} failed: {result}')
+            self.log.error(
+                f'delete vlan {vid} port {port} failed: {result}')
             return False
         else:
-            log.info(f'[{self.ip}:{port}] vlan {vid} deleted')
+            self.log.info(f'vlan {vid} deleted from port {port}')
             return True
 
     def add_vlans_ports(self, ports, vid_list,
@@ -840,18 +847,18 @@ class Switch:
             # get current vlans from port for some checks
             cur_vlans = self.get_vlan_port(port=port)
             if not cur_vlans:
-                log.error(f'[{self.ip}:{port}] failed to get vlans from port')
+                self.log.error(f'failed to get vlans from port {port}')
                 # skip current port on error
                 continue
             # vlan processing
             for vid in vid_list:
                 if vid == cur_vlans['untagged'] and not force_untagged:
-                    log.warning(
-                        f'[{self.ip}:{port}] vlan {vid} already set untagged. '
+                    self.log.warning(
+                        f'vlan {vid} already set untagged on port {port}. '
                         'Skipping. Use `force_untagged=True` to replace.')
                 elif vid in cur_vlans['tagged']:
-                    log.info(
-                        f'[{self.ip}:{port}] vlan {vid} already set. Skipping')
+                    self.log.info(
+                        f'vlan {vid} already set on port {port}. Skipping')
                 else:
                     self.add_vlan_port(port=port, vid=vid, tag=True,
                                        force_create=force_create)
@@ -872,7 +879,7 @@ class Switch:
             # get current vlans from port for some checks
             cur_vlans = self.get_vlan_port(port=port)
             if not cur_vlans:
-                log.error(f'[{self.ip}:{port}] failed to get vlans from port')
+                self.log.error(f'failed to get vlans from port {port}')
                 # skip current port on error
                 continue
             # delete all vlans on empty list
@@ -886,12 +893,12 @@ class Switch:
             # vlan processing
             for vid in del_list:
                 if vid == cur_vlans['untagged'] and not force_untagged:
-                    log.warning(
-                        f'[{self.ip}:{port}] vlan {vid} is untagged. '
+                    self.log.warning(
+                        f'port {port} vlan {vid} is untagged. '
                         'Skipping. Use `force_untagged=True` to delete.')
                 elif not vid in cur_vlans['tagged']:
-                    log.info(
-                        f'[{self.ip}:{port}] no vlan {vid} on port. Skipping')
+                    self.log.info(
+                        f'no vlan {vid} on port {port}. Skipping')
                 else:
                     self.delete_vlan_port(port=port, vid=vid)
 
@@ -964,9 +971,9 @@ async def batch_async(sw_list, func, external=False, max_workers=1024):
             try:
                 sw = Switch(ip)
             except Switch.UnavailableError as e:
-                log.warning(e)
+                self.log.warning(e)
             except Exception as e:
-                log.error(f'{ip}: {e}')
+                self.log.error(f'{e}')
             else:
                 if external:
                     args = [func, sw]
@@ -977,4 +984,4 @@ async def batch_async(sw_list, func, external=False, max_workers=1024):
         try:
             await asyncio.gather(*jobs, return_exceptions=False)
         except Exception as e:
-            log.error(f'async error: {e}')
+            self.log.error(f'async error: {e}')
