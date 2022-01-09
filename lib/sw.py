@@ -1,46 +1,28 @@
 #!/usr/bin/env python3
-# sw.py
+# lib/sw.py
 
-from easysnmp import snmp_get
-from arpreq import arpreq
-from icmplib import ping as icmp_ping
-from colorama import Fore, Back, Style
-import netaddr
-import re
-import pexpect
-import logging
-import logging.config
-from jinja2 import Environment as j2env
-from jinja2 import FileSystemLoader as j2loader
-from time import time
+# internal imports
 import asyncio
 import concurrent.futures
+import logging
+import re
+from time import time
 
-from config import config
+# external imports
+from arpreq import arpreq
+from colorama import Fore, Back, Style
+from easysnmp import snmp_get
+from icmplib import ping as icmp_ping
+from jinja2 import Environment as j2env
+from jinja2 import FileSystemLoader as j2loader
+import netaddr
+import pexpect
 
-log = logging.getLogger()
-logging.config.dictConfig(config['logger'])
+# local imports
+from .config import ROOT_DIR, SECRETS, NETS, MODEL_COLORS
 
-j2 = j2env(loader=j2loader('templates/'))
-
-NETS = netaddr.IPSet(netaddr.IPRange('192.168.57.1', '192.168.57.249')) |\
-    netaddr.IPSet(netaddr.IPRange('192.168.58.2', '192.168.58.249')) |\
-    netaddr.IPSet(netaddr.IPRange('192.168.59.2', '192.168.59.249')) |\
-    netaddr.IPSet(netaddr.IPRange('192.168.60.2', '192.168.60.249')) |\
-    netaddr.IPSet(netaddr.IPRange('192.168.47.2', '192.168.47.249')) |\
-    netaddr.IPSet(netaddr.IPRange('192.168.49.2', '192.168.49.249'))
-
-MODEL_COLORS = {'DXS-3600-32S': Fore.RED + Style.BRIGHT,
-                'DGS-3627G': Fore.YELLOW + Style.BRIGHT,
-                'DGS-3120-24SC': Fore.GREEN + Style.BRIGHT,
-                'DXS-1210-12SC/A2': Fore.BLUE + Style.BRIGHT,
-                'DXS-1210-28S': Fore.BLUE + Style.BRIGHT,
-                'LTP-8X': Fore.CYAN + Style.BRIGHT,
-                'DXS-1210-12SC/A1': Fore.BLUE + Style.DIM,
-                'GEPON': Style.DIM,
-                'S5328C-EI-24S': Style.DIM,
-                'DEFAULT': Fore.GREEN,
-                }
+# module logger
+log = logging.getLogger(__name__)
 
 
 class Switch:
@@ -212,11 +194,11 @@ class Switch:
 
         # check that connection is not established
         if not hasattr(self, '_connection') or not self._connection.isalive():
-            # set credentials
+            # set credentials from secrets config file
             if re.search(r'DXS|3627G', self.model):
-                creds = config['secrets']['admin_profile']
+                creds = SECRETS['admin_profile']
             else:
-                creds = config['secrets']['user_profile']
+                creds = SECRETS['user_profile']
 
             # set prompt
             if re.search('DXS-1210-12SC/A1', self.model):
@@ -293,9 +275,12 @@ class Switch:
             self.log.debug(f'template: {template}')
             self.log.debug(f'kwargs: {kwargs}')
             try:
+                # render template from templates dir
+                j2 = j2env(loader=j2loader(ROOT_DIR/'templates'))
                 commands = j2.get_template(template).render(sw=self, **kwargs)
             except Exception as e:
-                self.log.error(f'Template {template} loading error: {str(e)}')
+                self.log.error(
+                    f'Template `{template}` loading error: {str(e)}')
 
         # exit on empty commands
         if not commands:
