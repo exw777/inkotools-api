@@ -31,4 +31,5 @@ loggers:
     # level: DEBUG
     level: WARNING
     handlers: [colour]
+disable_existing_loggers: false
 ...
