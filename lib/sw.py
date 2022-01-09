@@ -971,9 +971,9 @@ async def batch_async(sw_list, func, external=False, max_workers=1024):
             try:
                 sw = Switch(ip)
             except Switch.UnavailableError as e:
-                self.log.warning(e)
+                log.warning(e)
             except Exception as e:
-                self.log.error(f'{e}')
+                log.error(f'{e}')
             else:
                 if external:
                     args = [func, sw]
@@ -984,4 +984,4 @@ async def batch_async(sw_list, func, external=False, max_workers=1024):
         try:
             await asyncio.gather(*jobs, return_exceptions=False)
         except Exception as e:
-            self.log.error(f'async error: {e}')
+            log.error(f'async error: {e}')
