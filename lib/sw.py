@@ -54,7 +54,7 @@ class Switch:
         """
 
         # logger with ip name
-        self.log = logging.getLogger(ip)
+        self.log = logging.getLogger(str(ip))
 
         # set ip address
         self.ip = netaddr.IPAddress(ip)
