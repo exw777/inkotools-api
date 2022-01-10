@@ -1,0 +1,44 @@
+---
+NETS:
+  - start: '192.168.57.1'
+    end: '192.168.57.249'
+  - start: '192.168.58.2'
+    end: '192.168.58.249'
+  - start: '192.168.59.2'
+    end: '192.168.59.249'
+  - start: '192.168.60.2'
+    end: '192.168.60.249'
+  - start: '192.168.47.2'
+    end: '192.168.47.249'
+  - start: '192.168.49.2'
+    end: '192.168.49.249'
+
+MODEL_COLORS:
+  DXS-3600-32S:
+    Fore: RED
+    Style: BRIGHT
+  DGS-3627G:
+    Fore: YELLOW
+    Style: BRIGHT
+  DGS-3120-24SC:
+    Fore: GREEN
+    Style: BRIGHT
+  DXS-1210-12SC/A2:
+    Fore: BLUE
+    Style: BRIGHT
+  DXS-1210-28S:
+    Fore: BLUE
+    Style: BRIGHT
+  LTP-8X:
+    Fore: CYAN
+    Style: BRIGHT
+  DXS-1210-12SC/A1:
+    Fore: BLUE
+    Style: DIM
+  GEPON:
+    Style: DIM
+  S5328C-EI-24S:
+    Style: DIM
+  DEFAULT:
+    Fore: GREEN
+...
