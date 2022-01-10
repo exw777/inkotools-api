@@ -6,17 +6,18 @@ import asyncio
 import concurrent.futures
 import logging
 import re
+import socket
 from time import time
 
 # external imports
+import netaddr
+import pexpect
 from arpreq import arpreq
 from colorama import Fore, Back, Style
 from easysnmp import snmp_get
 from icmplib import ping as icmp_ping
 from jinja2 import Environment as j2env
 from jinja2 import FileSystemLoader as j2loader
-import netaddr
-import pexpect
 
 # local imports
 from .config import ROOT_DIR, SECRETS, NETS, MODEL_COLORS
@@ -45,7 +46,7 @@ class Switch:
         UnavailableError: Raises on init if the switch is unavailable.
     """
 
-    def __init__(self, ip):
+    def __init__(self, ip, offline_data=None):
         """Init of switch class
 
         Arguments:
@@ -59,78 +60,88 @@ class Switch:
         # set ip address
         self.ip = netaddr.IPAddress(ip)
 
-        # check availability
-        # arpreq is faster than icmp, but only works when
-        # there is a corresponding entry in the local arp table
-        if not (arpreq(self.ip) or self.is_alive()):
+        # check availability via telnet
+        if not self.is_alive_telnet():
             raise self.UnavailableError(
                 f'Host {str(self.ip)} is not available!')
 
-        # set model
-        self.model = re.search(r'[A-Z]{1,3}-?[0-9]{1,4}[^ ]*|GEPON',
-                               self.get_oid('1.3.6.1.2.1.1.1.0'))[0]
-        # add HW revision for DXS-1210-12SC
-        if self.model == 'DXS-1210-12SC':
-            self.model += '/' + self.get_oid('1.3.6.1.2.1.47.1.1.1.1.8.1')
-
-        # set system location
-        self.location = self.get_oid('1.3.6.1.2.1.1.6.0')
-
-        # set managment ip for L3 switches
-        # we need the first interface in snmp_walk 1.3.6.1.2.1.16.19.11.1.1,
-        # but snmp_walk is slower, than hardcoded snmp_get for two models
-        if self.model == 'DXS-3600-32S':
-            o = '5120'
-        elif self.model == 'DGS-3627G':
-            o = '5121'
-        else:
-            o = None
-        if o:
-            self.mgmt_ip = netaddr.IPAddress(self.get_oid(
-                f'1.3.6.1.2.1.16.19.11.1.1.{o}'))
-        else:
+        # none-snmp mode for using with proxychains
+        if offline_data:
+            self.log.warning('Working in none-snmp mode')
+            self.log.debug(f'Got data: {offline_data}')
+            self.mac = offline_data['mac']
+            self.model = offline_data['model']
+            self.location = offline_data['location']
             self.mgmt_ip = self.ip
+        else:
+            # set model
+            self.model = re.search(r'[A-Z]{1,3}-?[0-9]{1,4}[^ ]*|GEPON',
+                                   self.get_oid('1.3.6.1.2.1.1.1.0'))[0]
+            # add HW revision for DXS-1210-12SC
+            if self.model == 'DXS-1210-12SC':
+                self.model += '/' + self.get_oid('1.3.6.1.2.1.47.1.1.1.1.8.1')
 
-        if not self.mgmt_ip in NETS:
-            self.log.warning(
-                f'Address {self.ip} is out of inkotel switches range')
+            # set system location
+            self.location = self.get_oid('1.3.6.1.2.1.1.6.0')
 
-        # set mac address
-        # first, try via arp, second via snmp
-        try:
-            self.mac = netaddr.EUI(arpreq(self.ip))
-        except TypeError:
-            # most of dlink and qtech have special self-mac interface
-            # for DXS-1210-12SC (both A1 and A2 revisions) we use mac
-            # of the first port, which differs from the self-mac by 1
-            # HUAWEY and both models of GPON are not supported yet
-            if re.search('DXS-1210-12SC', self.model):
-                o = '1'
-            elif re.search('QSW', self.model):
-                o = '3001'
-            elif re.search(r'3600|3526', self.model):
+            # set managment ip for L3 switches, we need the first interface in
+            # snmp_walk 1.3.6.1.2.1.16.19.11.1.1
+            # but snmp_walk is slower, than hardcoded snmp_get for two models
+            if self.model == 'DXS-3600-32S':
                 o = '5120'
-            elif re.search(r'DES|DGS|DXS', self.model):
+            elif self.model == 'DGS-3627G':
                 o = '5121'
             else:
                 o = None
-            # easysnmp returns mac in OCTETSTR type, which is a string
-            # of characters corresponding to the bytes of the mac
-            # we need some magic to convert it to netaddr mac
-            # byte(char) -> int -> hex -> byte(str)
             if o:
-                snmp_mac = self.get_oid(f'1.3.6.1.2.1.2.2.1.6.{o}')
-                if re.search('NOSUCH', snmp_mac):
-                    snmp_mac = None
-                else:
-                    self.mac = netaddr.EUI(
-                        ':'.join(map(lambda x: hex(ord(x))[2:], snmp_mac)))
-                    if o == '1':
-                        self.mac = netaddr.EUI((int(self.mac)-1))
+                self.mgmt_ip = netaddr.IPAddress(self.get_oid(
+                    f'1.3.6.1.2.1.16.19.11.1.1.{o}'))
             else:
-                self.mac = netaddr.EUI(0)
+                self.mgmt_ip = self.ip
+
+            if not self.mgmt_ip in NETS:
                 self.log.warning(
-                    f"Can't get mac for {self.ip}, using: {self.mac}")
+                    f'Address {self.ip} is out of inkotel switches range')
+
+            # set mac address
+            # first, try via arp, second via snmp (for routed ips)
+            try:
+                if not arpreq(self.ip):
+                    # ping to update arp table
+                    ping(self.ip)
+                self.mac = netaddr.EUI(arpreq(self.ip))
+            except TypeError:
+                # most of dlink and qtech have special self-mac interface
+                # for DXS-1210-12SC (both A1 and A2 revisions) we use mac
+                # of the first port, which differs from the self-mac by 1
+                # HUAWEY and both models of GPON are not supported yet
+                if re.search('DXS-1210-12SC', self.model):
+                    o = '1'
+                elif re.search('QSW', self.model):
+                    o = '3001'
+                elif re.search(r'3600|3526', self.model):
+                    o = '5120'
+                elif re.search(r'DES|DGS|DXS', self.model):
+                    o = '5121'
+                else:
+                    o = None
+                # easysnmp returns mac in OCTETSTR type, which is a string
+                # of characters corresponding to the bytes of the mac
+                # we need some magic to convert it to netaddr mac
+                # byte(char) -> int -> hex -> byte(str)
+                if o:
+                    snmp_mac = self.get_oid(f'1.3.6.1.2.1.2.2.1.6.{o}')
+                    if re.search('NOSUCH', snmp_mac):
+                        snmp_mac = None
+                    else:
+                        self.mac = netaddr.EUI(
+                            ':'.join(map(lambda x: hex(ord(x))[2:], snmp_mac)))
+                        if o == '1':
+                            self.mac = netaddr.EUI((int(self.mac)-1))
+                else:
+                    self.mac = netaddr.EUI(0)
+                    self.log.warning(
+                        f"Can't get mac for {self.ip}, using: {self.mac}")
 
         # get max ports from switch model and set transit and access ports
         max_ports = re.findall(r'(?:.*)(\d{2})(?:.*$)', self.model)
@@ -154,6 +165,16 @@ class Switch:
         """Custom exception when switch is not available"""
         pass
 
+    def is_alive_telnet(self):
+        """Check if tcp port 23 is available"""
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        res = s.connect_ex((str(self.ip), 23))
+        s.close()
+        if res == 0:
+            return True
+        else:
+            return False
+
     def is_alive(self):
         """Check if switch is available via icmp"""
         result = ping(self.ip).is_alive
@@ -161,8 +182,12 @@ class Switch:
 
     def get_oid(self, oid):
         """Get snmp oid from switch"""
-        return snmp_get(oid, hostname=str(self.ip),
-                        version=2, timeout=3).value
+        if offline_data:
+            self.debug.warning('Enabled none-snmp mode, skipping')
+            return None
+        else:
+            return snmp_get(oid, hostname=str(self.ip),
+                            version=2, timeout=3).value
 
     def show(self, full=False):
         """Print short switch description
