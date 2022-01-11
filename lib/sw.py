@@ -182,12 +182,8 @@ class Switch:
 
     def get_oid(self, oid):
         """Get snmp oid from switch"""
-        if offline_data:
-            self.debug.warning('Enabled none-snmp mode, skipping')
-            return None
-        else:
-            return snmp_get(oid, hostname=str(self.ip),
-                            version=2, timeout=3).value
+        return snmp_get(oid, hostname=str(self.ip),
+                        version=2, timeout=3).value
 
     def show(self, full=False):
         """Print short switch description
