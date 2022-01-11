@@ -58,13 +58,15 @@ ARGS = main_parser.parse_args()
 
 if ARGS.module == 'sw':
     ip = full_ip(ARGS.ip)
+    data = None
     if ARGS.proxychains:
         log.debug('proxychains mode enabled')
         # get local data
         db = DB(COMMON['DB_FILE'])
         data = db.get(ip)
-    else:
-        data = None
+        if data is None:
+            log.fatal('Failed to get data from local database')
+            exit(1)
     try:
         sw = Switch(ip, offline_data=data)
     except Switch.UnavailableError as e:
