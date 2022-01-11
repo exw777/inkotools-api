@@ -1,61 +1,79 @@
 #!/usr/bin/env python3
+# cli.py
 
-import click
+# internal imports
+import argparse
+import logging
+import signal
+
+# external imports
+
+# local imports
+from lib.config import COMMON
+from lib.db import DB
 from lib.sw import Switch, full_ip
 
+# module logger
+log = logging.getLogger(__name__)
 
-@click.group()
-@click.argument('ip')
-@click.pass_context
-def cli(ctx, ip):
+
+# Exit on ctrl+c and ctrl+z
+def exit_handler(signal_received, frame):
+    exit()
+
+
+signal.signal(signal.SIGINT, exit_handler)  # ctlr + c
+signal.signal(signal.SIGTSTP, exit_handler)  # ctlr + z
+
+
+def serve_module(module):
+    # TODO: add completions and history
+    prompt = f'{module}>'
+    while True:
+        try:
+            cmd = input(prompt)
+        except EOFError:
+            print(f'\n{prompt}')
+            continue
+        if cmd == 'exit':
+            break
+        elif cmd != '':
+            try:
+                print(eval(f'{module}.{cmd}'))
+            except Exception as e:
+                log.error(e)
+
+
+main_parser = argparse.ArgumentParser()
+module_parser = main_parser.add_subparsers(dest='module')
+
+sw_parser = module_parser.add_parser('sw')
+sw_parser.add_argument('ip', type=str)
+sw_parser.add_argument('-p', '--proxychains',  action='store_true')
+sw_parser.add_argument('-i', '--interact', action='store_true')
+
+db_parser = module_parser.add_parser('db')
+
+ARGS = main_parser.parse_args()
+
+if ARGS.module == 'sw':
+    ip = full_ip(ARGS.ip)
+    if ARGS.proxychains:
+        log.debug('proxychains mode enabled')
+        # get local data
+        db = DB(COMMON['DB_FILE'])
+        data = db.get(ip)
+    else:
+        data = None
     try:
-        ctx.obj = Switch(full_ip(ip))
+        sw = Switch(ip, offline_data=data)
     except Switch.UnavailableError as e:
         exit(e)
-
-
-@cli.command()
-@click.pass_context
-@click.option('--full', is_flag=True, help='Show additional info.')
-def show(ctx, full):
-    """Print short switch description"""
-    print(ctx.obj.show(full=full))
-
-
-@cli.command()
-@click.pass_context
-def connect(ctx):
-    """Interact with switch via telnet"""
-    ctx.obj.interact()
-
-
-@cli.command(context_settings=dict(
-    ignore_unknown_options=True,
-    allow_extra_args=True,
-))
-@click.pass_context
-@click.argument('arg')
-@click.option('--file', is_flag=True, help='Use template file.')
-def send(ctx, arg, file):
-    """Send CMD to switch via telnet"""
-    if file:
-        # parse extra params for template
-        params = dict()
-        from ast import literal_eval
-        for item in ctx.args:
-            p = item.split('=')
-            params[p[0]] = literal_eval(p[1])
-        print(ctx.obj.send(template=arg, **params))
+    if ARGS.interact:
+        sw.interact()
     else:
-        print(ctx.obj.send(commands=arg))
+        serve_module('sw')
 
-
-@cli.command()
-@click.pass_context
-@click.argument('oid')
-def snmp(ctx, oid):
-    """SNMP get OID from switch"""
-    print(ctx.obj.get_oid(oid))
-
-
-cli()
+elif ARGS.module == 'db':
+    db = DB(COMMON['DB_FILE'])
+    serve_module('db')

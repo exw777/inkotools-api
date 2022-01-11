@@ -1,4 +1,6 @@
 ---
+DB_FILE: switches
+
 NETS:
   - start: '192.168.57.1'
     end: '192.168.57.249'
