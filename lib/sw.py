@@ -60,8 +60,10 @@ class Switch:
         # set ip address
         self.ip = netaddr.IPAddress(ip)
 
-        # check availability via telnet
-        if not self.is_alive_telnet():
+        # check availability: arp --> icmp --> telnet
+        # arpreq is faster than icmp, but only works when
+        # there is a corresponding entry in the local arp table
+        if not (arpreq(self.ip) or self.is_alive() or self.is_alive_telnet()):
             raise self.UnavailableError(
                 f'Host {str(self.ip)} is not available!')
 
@@ -168,6 +170,7 @@ class Switch:
     def is_alive_telnet(self):
         """Check if tcp port 23 is available"""
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(0.1)
         res = s.connect_ex((str(self.ip), 23))
         s.close()
         if res == 0:
@@ -915,7 +918,7 @@ class Switch:
 
 def ping(ip):
     """Ping with one packet"""
-    result = icmp_ping(str(ip), count=1, timeout=1, privileged=False)
+    result = icmp_ping(str(ip), count=1, timeout=0.1, privileged=False)
     return result
 
 
