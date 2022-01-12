@@ -3,21 +3,27 @@
 
 # internal imports
 import argparse
+import asyncio
 import logging
 import signal
+from time import time
 
 # external imports
 
 # local imports
-from lib.config import COMMON
+from lib.config import COMMON, NETS
 from lib.db import DB
-from lib.sw import Switch, full_ip
+from lib.sw import Switch, full_ip, batch_async
 
 # module logger
 log = logging.getLogger(__name__)
 
+# init db
+db = DB(COMMON['DB_FILE'])
 
 # Exit on ctrl+c and ctrl+z
+
+
 def exit_handler(signal_received, frame):
     exit()
 
@@ -44,17 +50,36 @@ def serve_module(module):
                 log.error(e)
 
 
+def update_database():
+    log.info('Scanning for new switches, please wait...')
+    start = time()
+    cnt = 0
+    for ip in NETS:
+        try:
+            sw = Switch(ip)
+        except Switch.UnavailableError:
+            log.debug(f'{ip} is unavailable, skipping')
+        else:
+            cnt += db.add(sw)
+    end = time() - start
+    log.info(f'Done in {end:.2f}s, {cnt} items added.')
+
+
 main_parser = argparse.ArgumentParser()
 module_parser = main_parser.add_subparsers(dest='module')
 
 sw_parser = module_parser.add_parser('sw')
 sw_parser.add_argument('ip', type=str)
-sw_parser.add_argument('-p', '--proxychains',  action='store_true')
+sw_parser.add_argument('-p', '--proxychains', action='store_true')
 sw_parser.add_argument('-i', '--interact', action='store_true')
 
 db_parser = module_parser.add_parser('db')
+db_parser.add_argument('-u', '--update', action='store_true')
+
+cfg_parser = module_parser.add_parser('cfg')
 
 ARGS = main_parser.parse_args()
+
 
 if ARGS.module == 'sw':
     ip = full_ip(ARGS.ip)
@@ -62,7 +87,6 @@ if ARGS.module == 'sw':
     if ARGS.proxychains:
         log.debug('proxychains mode enabled')
         # get local data
-        db = DB(COMMON['DB_FILE'])
         data = db.get(ip)
         if data is None:
             log.fatal('Failed to get data from local database')
@@ -77,5 +101,6 @@ if ARGS.module == 'sw':
         serve_module('sw')
 
 elif ARGS.module == 'db':
-    db = DB(COMMON['DB_FILE'])
+    if ARGS.update:
+        update_database()
     serve_module('db')
