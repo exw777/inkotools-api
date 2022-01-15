@@ -66,17 +66,12 @@ def update_database():
 
 
 def config_setup():
-    secrets = {'admin_profile': {'login': None, 'password': None},
-               'user_profile': {'login': None, 'password': None}}
-
-    for profile in secrets:
+    secrets = dict()
+    for profile in ['user_profile', 'admin_profile']:
         print(f'Setting up {profile}')
-        for key in secrets[profile]:
-            if key == 'password':
-                func = 'getpass'
-            else:
-                func = 'input'
-            secrets[profile][key] = eval(f'{func}("{key}: ")')
+        secrets[profile] = dict()
+        secrets[profile]['login'] = input('login: ')
+        secrets[profile]['password'] = getpass('password: ')
     write_cfg('secrets', secrets)
 
 
