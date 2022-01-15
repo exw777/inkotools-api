@@ -71,7 +71,7 @@ def write_cfg(cfg_name, data={}):
     log.debug(f'Got data: {data}')
     conf = cfg_file(cfg_name)
     try:
-        conf.write_text(yaml.safe_dump(data))
+        conf.write_text('---\n' + yaml.safe_dump(data) + '...\n')
     except Exception as e:
         log.error(f'{cfg_name} failed: {e}')
     else:
