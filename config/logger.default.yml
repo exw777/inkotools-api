@@ -1,6 +1,5 @@
 ---
 # Default config file for logger
-# Copy this file to 'logger.yml'
 version: 1
 formatters:
   colorlog:
@@ -28,8 +27,7 @@ handlers:
     formatter: colorlog
 loggers:
   '':
-    # level: DEBUG
-    level: WARNING
+    level: INFO
     handlers: [colour]
 disable_existing_loggers: false
 ...

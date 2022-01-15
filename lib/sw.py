@@ -167,6 +167,10 @@ class Switch:
         """Custom exception when switch is not available"""
         pass
 
+    class CredentialsError(Exception):
+        """Custom exception on wrong creds"""
+        pass
+
     def is_alive_telnet(self):
         """Check if tcp port 23 is available"""
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -219,10 +223,16 @@ class Switch:
         # check that connection is not established
         if not hasattr(self, '_connection') or not self._connection.isalive():
             # set credentials from secrets config file
-            if re.search(r'DXS|3627G', self.model):
-                creds = SECRETS['admin_profile']
-            else:
-                creds = SECRETS['user_profile']
+            try:
+                if re.search(r'DXS|3627G', self.model):
+                    creds = SECRETS['admin_profile']
+                else:
+                    creds = SECRETS['user_profile']
+                login = creds['login']
+                password = creds['password']
+            except KeyError as e:
+                raise self.CredentialsError(
+                    'Failed to parse secrets config') from e
 
             # set prompt
             if re.search('DXS-1210-12SC/A1', self.model):
@@ -245,13 +255,12 @@ class Switch:
                                timeout=120, encoding="utf-8")
 
             tn.expect('ame:|in:')
-            tn.send(creds['login']+'\r')
+            tn.send(login+'\r')
             tn.expect('ord:')
-            tn.send(creds['password']+'\r')
+            tn.send(password+'\r')
             # asking login again - wrong password
             if tn.expect([prompt, 'ame:|in:']) == 1:
-                self.log.critical('Wrong password!')
-                exit(f"Verify contents of 'secrets.yml' and try again.")
+                raise self.CredentialsError('Wrong login or password!')
             else:
                 # calculate full prompt-line for further usage
                 self._prompt = tn.before.split()[-1] + prompt

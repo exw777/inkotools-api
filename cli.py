@@ -3,15 +3,15 @@
 
 # internal imports
 import argparse
-import asyncio
 import logging
 import signal
+from getpass import getpass
 from time import time
 
 # external imports
 
 # local imports
-from lib.config import COMMON, NETS
+from lib.config import COMMON, NETS, write_cfg
 from lib.db import DB
 from lib.sw import Switch, full_ip, batch_async
 
@@ -65,6 +65,21 @@ def update_database():
     log.info(f'Done in {end:.2f}s, {cnt} items added.')
 
 
+def config_setup():
+    secrets = {'admin_profile': {'login': None, 'password': None},
+               'user_profile': {'login': None, 'password': None}}
+
+    for profile in secrets:
+        print(f'Setting up {profile}')
+        for key in secrets[profile]:
+            if key == 'password':
+                func = 'getpass'
+            else:
+                func = 'input'
+            secrets[profile][key] = eval(f'{func}("{key}: ")')
+    write_cfg('secrets', secrets)
+
+
 main_parser = argparse.ArgumentParser()
 module_parser = main_parser.add_subparsers(dest='module')
 
@@ -77,6 +92,7 @@ db_parser = module_parser.add_parser('db')
 db_parser.add_argument('-u', '--update', action='store_true')
 
 cfg_parser = module_parser.add_parser('cfg')
+cfg_parser.add_argument('-s', '--setup', action='store_true')
 
 ARGS = main_parser.parse_args()
 
@@ -95,12 +111,20 @@ if ARGS.module == 'sw':
         sw = Switch(ip, offline_data=data)
     except Switch.UnavailableError as e:
         exit(e)
-    if ARGS.interact:
-        sw.interact()
-    else:
-        serve_module('sw')
+    try:
+        if ARGS.interact:
+            sw.interact()
+        else:
+            serve_module('sw')
+    except Switch.CredentialsError as e:
+        log.error(e)
+        exit('Run cfg --setup')
 
 elif ARGS.module == 'db':
     if ARGS.update:
         update_database()
     serve_module('db')
+
+elif ARGS.module == 'cfg':
+    if ARGS.setup:
+        config_setup()
