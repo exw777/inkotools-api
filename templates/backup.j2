@@ -28,6 +28,7 @@
     save
     copy fs://config tftp://{{ server }}/{{ path }}/{{ ip }}.cfg
 {%- elif sw.model == 'DXS-1210-12SC/A1' -%}
+    save startup-config
     copy startup-config tftp://{{ server }}/{{ path }}/{{ ip }}.bin
 {%- elif sw.model == 'DXS-1210-12SC/A2' -%}
     copy running-config tftp://{{ server }}/{{ path }}/{{ ip }}.cfg
