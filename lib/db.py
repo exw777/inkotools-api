@@ -175,7 +175,7 @@ class DB:
         if result is not None:
             return self._row_format(result)
         else:
-            log.error(f'{sw_ip} failed')
+            log.debug(f'{sw_ip} not found')
             return None
 
     def delete(self, sw_ip):
