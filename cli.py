@@ -88,7 +88,6 @@ def main():
     # sw module
     sw_parser = module_parser.add_parser('sw')
     sw_parser.add_argument('ip', type=str)
-    sw_parser.add_argument('-p', '--proxychains', action='store_true')
     sw_parser.add_argument('-i', '--interact', action='store_true')
 
     # db module
@@ -106,8 +105,7 @@ def main():
     if ARGS.module == 'sw':
         ip = full_ip(ARGS.ip)
         data = None
-        if ARGS.proxychains:
-            log.debug('proxychains mode enabled')
+        if COMMON['no_snmp_mode']:
             # get local data
             data = db.get(ip)
             if data is None:

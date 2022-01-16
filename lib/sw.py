@@ -12,18 +12,23 @@ from time import time
 # external imports
 import netaddr
 import pexpect
-from arpreq import arpreq
 from colorama import Fore, Back, Style
-from easysnmp import snmp_get
 from icmplib import ping as icmp_ping
 from jinja2 import Environment as j2env
 from jinja2 import FileSystemLoader as j2loader
 
 # local imports
-from .config import ROOT_DIR, SECRETS, NETS, MODEL_COLORS
+from .config import ROOT_DIR, COMMON, SECRETS, NETS, MODEL_COLORS
 
 # module logger
 log = logging.getLogger(__name__)
+
+# dynamic imports for normal mode
+if COMMON['no_snmp_mode']:
+    log.debug('Working in no-snmp mode')
+else:
+    from arpreq import arpreq
+    from easysnmp import snmp_get
 
 
 class Switch:
@@ -60,16 +65,18 @@ class Switch:
         # set ip address
         self.ip = netaddr.IPAddress(ip)
 
-        # check availability: arp --> icmp --> telnet
-        # arpreq is faster than icmp, but only works when
-        # there is a corresponding entry in the local arp table
-        if not (arpreq(self.ip) or self.is_alive() or self.is_alive_telnet()):
+        # check availability
+        if not self.is_alive():
             raise self.UnavailableError(
                 f'Host {str(self.ip)} is not available!')
 
+        if COMMON['no_snmp_mode'] and offline_data is None:
+            # TODO: get this values via telnet
+            raise self.UnavailableError(
+                f'{str(self.ip)} empty data in no-snmp mode')
+
         # none-snmp mode for using with proxychains
         if offline_data:
-            self.log.warning('Working in none-snmp mode')
             self.log.debug(f'Got data: {offline_data}')
             self.mac = offline_data['mac']
             self.model = offline_data['model']
@@ -171,8 +178,18 @@ class Switch:
         """Custom exception on wrong creds"""
         pass
 
-    def is_alive_telnet(self):
-        """Check if tcp port 23 is available"""
+    def is_alive(self):
+        """Check if switch is available
+
+        check availability: arp --> icmp --> telnet
+        arpreq is faster than icmp, but only works when
+        there is a corresponding entry in the local arp table
+        first two check are skipping in no-snmp mode
+        """
+        if not COMMON['no_snmp_mode']:
+            if arpreq(self.ip) or ping(self.ip).is_alive:
+                return True
+        # third check is via tcp port 23 (telnet)
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(0.1)
         res = s.connect_ex((str(self.ip), 23))
@@ -182,13 +199,11 @@ class Switch:
         else:
             return False
 
-    def is_alive(self):
-        """Check if switch is available via icmp"""
-        result = ping(self.ip).is_alive
-        return result
-
     def get_oid(self, oid):
         """Get snmp oid from switch"""
+        if COMMON['no_snmp_mode']:
+            self.error('Calling snmp in no-snmp mode')
+            return None
         return snmp_get(oid, hostname=str(self.ip),
                         version=2, timeout=3).value
 

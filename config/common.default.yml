@@ -1,6 +1,8 @@
 ---
 DB_FILE: switches
 
+no_snmp_mode: false
+
 NETS:
   - start: '192.168.57.1'
     end: '192.168.57.249'
