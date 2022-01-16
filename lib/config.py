@@ -81,7 +81,7 @@ def write_cfg(cfg_name, data={}):
 # load global logger settings
 try:
     logging.config.dictConfig(load_cfg('logger'))
-except ValueError as e:
+except Exception as e:
     logging.config.dictConfig(load_cfg('logger', force_default=True))
     log.error(f'User config caused error: {e}, default cfg file loaded')
 
