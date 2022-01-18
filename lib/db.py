@@ -81,7 +81,7 @@ class DB:
 
     def _open(self):
         try:
-            self._connection = sqlite3.connect(self.db_file)
+            self._connection = sqlite3.connect(self.db_file, check_same_thread=False)
             # use output in sqlite3.Row instead of tuple
             self._connection.row_factory = sqlite3.Row
             self._cursor = self._connection.cursor()
