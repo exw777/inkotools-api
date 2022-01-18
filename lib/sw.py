@@ -350,8 +350,8 @@ class Switch:
 
         output = ''
         for cmd in commands:
-            # skip empty commands
-            if not cmd:
+            # skip empty and commented commands
+            if not cmd or re.search(r'^#', cmd):
                 continue
             self.log.debug(f'command: {cmd}')
             tn.sendline(cmd)
@@ -361,7 +361,12 @@ class Switch:
 
             # on dlink cli skip writing to output command confirmation
             if re.search(r'DGS|DES', self.model):
-                tn.expect('Command:')
+                match = tn.expect(['Command:', 'Available commands:'])
+                # also check for incorrect command
+                if match == 1:
+                    self.log.error(f'Wrong command: {cmd}')
+                    continue
+
             tn.expect(self._endline)
 
             # regex for cisco cli configure terminal mode
