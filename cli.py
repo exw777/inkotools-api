@@ -112,6 +112,7 @@ def main():
                 log.fatal('Failed to get data from local database')
                 exit(1)
         try:
+            global sw
             sw = Switch(ip, offline_data=data)
         except Switch.UnavailableError as e:
             exit(e)
