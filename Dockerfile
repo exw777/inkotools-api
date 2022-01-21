@@ -13,6 +13,9 @@ RUN apk update && apk add --update-cache \
 FROM base 
 WORKDIR /app/
 
+RUN mkdir /app/data/ && \
+    chown 1000:1000 /app/data/
+
 VOLUME ["/app/data/", "/app/config/"]
 
 ENV GUNICORN_THREADS=4 \
