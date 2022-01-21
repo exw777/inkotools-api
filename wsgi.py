@@ -49,11 +49,18 @@ def db_list():
     return jsonify(db.ip_list())
 
 
-@app.route('/db/<ip>', methods=['GET', 'POST', 'DELETE'])
-def db_ip(ip):
+@app.route('/db/<ip>', methods=['GET', 'DELETE'])
+def db_ip_get_delete(ip):
     # replace http methods to functions names
-    r = request.method.lower().replace('post', 'add')
+    r = request.method.lower()
     result = eval(f'db.{r}(ip)')
+    return jsonify(result)
+
+
+@app.route('/db/<ip>', methods=['POST'])
+def db_ip_add(ip):
+    sw = get_sw_instance(ip)
+    result = db.add(sw)
     return jsonify(result)
 
 
