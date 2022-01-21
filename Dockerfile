@@ -1,6 +1,6 @@
-FROM python:3.10-alpine as base
+FROM python:3.10-alpine AS base
 
-FROM base as build
+FROM base AS build
 WORKDIR /deps
 
 COPY requirements.txt /
