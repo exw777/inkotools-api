@@ -12,7 +12,7 @@ if [ -n "$PROXYCHAINS_ENABLED" ]; then
     echo "Proxychains enabled, starting with config:"
     cat $PROXYCHAINS_CONFIG_FILE
     if [ "$USER_ID" == "0"  ]; then
-        exec su-exec user proxychains -q -f $PROXYCHAINS_CONFIG_FILE $@
+        exec su-exec user proxychains -f $PROXYCHAINS_CONFIG_FILE $@
     else
         exec proxychains -f $PROXYCHAINS_CONFIG_FILE $@
     fi
