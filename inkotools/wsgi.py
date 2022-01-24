@@ -49,19 +49,59 @@ def db_list():
     return jsonify(db.ip_list())
 
 
-@app.route('/db/<ip>', methods=['GET', 'DELETE'])
-def db_ip_get_delete(ip):
-    # replace http methods to functions names
-    r = request.method.lower()
-    result = eval(f'db.{r}(ip)')
-    return jsonify(result)
+@app.route('/db/search', methods=['POST'])
+def db_search():
+    data = request.json
+    log.debug(f"Got data: {data}")
+    try:
+        keyword = data['keyword']
+    except KeyError:
+        return "no keyword\n", 400
+    else:
+        return jsonify(db.search(str(keyword)))
 
 
-@app.route('/db/<ip>', methods=['POST'])
-def db_ip_add(ip):
-    sw = get_sw_instance(ip)
-    result = db.add(sw)
-    return jsonify(result)
+@app.route('/db/sw/<ip>', methods=['GET'])
+def db_sw_get(ip):
+    try:
+        result = db.get(ip)
+    except Exception as e:
+        return f'{e}\n', 500
+    if result is None:
+        return f'Switch {ip} not found\n', 404
+    else:
+        return jsonify(result)
+
+
+@app.route('/db/sw/<ip>', methods=['DELETE'])
+def db_sw_delete(ip):
+    try:
+        result = db.delete(ip)
+    except Exception as e:
+        return f'{e}\n', 500
+    if result == 0:
+        return f'{ip} skipped (not found)\n'
+    elif result == 1:
+        return f'{ip} removed from database\n'
+    else:
+        return 501
+
+
+@app.route('/db/sw/<ip>', methods=['POST'])
+def db_sw_add(ip):
+    try:
+        sw = get_sw_instance(ip)
+        result = db.add(sw)
+    except Switch.UnavailableError:
+        return f'{ip} is not available\n', 404
+    except Exception as e:
+        return f'{e}\n', 500
+    if result == 0:
+        return f'{ip} skipped (no changes)\n'
+    elif result == 1:
+        return f'{ip} added to database\n'
+    else:
+        return 501
 
 
 @app.route('/sw/<ip>', methods=['GET'])
