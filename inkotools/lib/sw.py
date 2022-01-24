@@ -586,7 +586,7 @@ class Switch:
 
     def add_vlan(self, vid):
         """Add new vlan to switch"""
-
+        vid = int(vid)
         # check vid is valid
         if not vid in range(1, 4095):
             self.log.error(f'vid {vid} out of range')
@@ -618,6 +618,7 @@ class Switch:
 
     def delete_vlan(self, vid, force=False):
         """Delete vlan from switch"""
+        vid = int(vid)
         if vid == 1:
             self.log.error('Cannot delete vid 1')
         check_vlan = self.get_vlan(vid=vid)
@@ -665,7 +666,7 @@ class Switch:
             """
 
         # check port is valid
-        if port and not port in (self.access_ports + self.transit_ports):
+        if port and not int(port) in (self.access_ports + self.transit_ports):
             self.log.error(f'port {port} out of range')
             return False
 
@@ -755,6 +756,8 @@ class Switch:
         force_replace - replacing untagged vlan,
         unsafe        - skipping some safety checks."""
 
+        port = int(port)
+        vid = int(vid)
         # get current vlans from port for some checks
         cur_vlans = self.get_vlan_port(port=port)
         if not cur_vlans:
@@ -835,6 +838,8 @@ class Switch:
 
         unsafe - skip check of vid 1 deleting from transit ports"""
 
+        port = int(port)
+        vid = int(vid)
         # get current vlans from port for some checks
         cur_vlans = self.get_vlan_port(port=port)
         if not cur_vlans:
@@ -880,6 +885,9 @@ class Switch:
         # if only one port in args
         if isinstance(ports, int):
             ports = [ports]
+        # if ports are in dlink interval format
+        elif isinstance(ports, str):
+            ports = interval_to_list(ports)
 
         for port in ports:
             # get current vlans from port for some checks
@@ -890,6 +898,7 @@ class Switch:
                 continue
             # vlan processing
             for vid in vid_list:
+                vid = int(vid)
                 if vid == cur_vlans['untagged'] and not force_untagged:
                     self.log.warning(
                         f'vlan {vid} already set untagged on port {port}. '
@@ -912,6 +921,9 @@ class Switch:
         # if only one port in args
         if isinstance(ports, int):
             ports = [ports]
+        # if ports are in dlink interval format
+        elif isinstance(ports, str):
+            ports = interval_to_list(ports)
 
         for port in ports:
             # get current vlans from port for some checks
@@ -930,6 +942,7 @@ class Switch:
 
             # vlan processing
             for vid in del_list:
+                vid = int(vid)
                 if vid == cur_vlans['untagged'] and not force_untagged:
                     self.log.warning(
                         f'port {port} vlan {vid} is untagged. '
