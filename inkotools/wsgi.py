@@ -106,8 +106,11 @@ def db_sw_add(ip):
 
 @app.route('/sw/<ip>', methods=['GET'])
 def sw_ip(ip):
-    data = db.get(ip)
-    sw = get_sw_instance(ip)
+    try:
+        data = db.get(ip)
+        sw = get_sw_instance(ip)
+    except Exception as e:
+        return f'{e}\n', 500
     if sw is None and data is None:
         return f'{ip} not found\n', 404
     status = False
@@ -124,9 +127,13 @@ def sw_ip_func(ip, func):
     if sw is None:
         return f'{ip} is not available\n', 404
     data = request.json
-    log.debug(f'request func: {func}, data: {data}')
-    if data is None:
-        result = eval(f'sw.{func}()')
+    log.debug(f'[{ip}] request func: {func}, data: {data}')
+    try:
+        if data is None:
+            result = eval(f'sw.{func}()')
+        else:
+            result = eval(f'sw.{func}(**data)')
+    except Exception as e:
+        return f'{e}\n', 500
     else:
-        result = eval(f'sw.{func}(**data)')
-    return jsonify(result)
+        return jsonify(result)
