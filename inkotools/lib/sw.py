@@ -428,11 +428,12 @@ class Switch:
         end = time() - start
         r = r' successful|Success|finished|complete|Upload configuration.*Done'
         if result and re.search(r, result):
-            self.log.info(f'backup sent in {end:.2f}s')
-            return True
+            res = f'backup sent in {end:.2f}s'
+            self.log.info(res)
+            return res
         else:
             self.log.error(f'backup result is: {result}')
-            return result
+            return None
 
     def save(self):
         """Save config"""
@@ -445,11 +446,12 @@ class Switch:
         end = time() - start
         r = r'Done|Success|OK| success'
         if result and re.search(r, result):
-            self.log.info(f'saved in {end:.2f}s')
-            return True
+            res = f'saved in {end:.2f}s'
+            self.log.info(res)
+            return res
         else:
             self.log.error(f'wrong saving result: {result}')
-            return result
+            return None
 
     def get_acl(self, port=None):
         """Get acl from switch
