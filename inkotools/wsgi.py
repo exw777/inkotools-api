@@ -122,12 +122,13 @@ def sw_ip(ip):
 
 @app.route('/sw/<ip>/<func>', methods=['GET', 'POST'])
 def sw_ip_func(ip, func):
-    # TODO: func validation
     sw = get_sw_instance(ip)
     if sw is None:
         return f'{ip} is not available\n', 404
     data = request.json
     log.debug(f'[{ip}] request func: {func}, data: {data}')
+    if not func in sw.help():
+        return 'wrong function', 400
     try:
         if data is None:
             result = eval(f'sw.{func}()')
