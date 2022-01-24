@@ -415,6 +415,29 @@ class Switch:
             self.log.error(f'wrong saving result: {result}')
             return None
 
+    def get_port_state(self, port: int):
+        try:
+            result = self.send(template='port_state.j2', port=port)
+        except Exception as e:
+            self.log.error(f'port {port} failed: {e}')
+            return None
+        if not result:
+            return None
+        return result
+
+    def set_port_state(
+            self, port: int, state: bool,
+            comment: str = "", clear_comment: bool = False):
+
+        if comment == "" and not clear_comment:
+
+            result = self.send(template='port_state.j2',
+                               port=port, state=state)
+        else:
+            result = self.send(template='port_state.j2',
+                               port=port, state=state, comment=comment)
+        return result
+
     def get_acl(self, port=None):
         """Get acl from switch
 
