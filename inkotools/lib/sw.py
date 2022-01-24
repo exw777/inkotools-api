@@ -18,7 +18,7 @@ from jinja2 import Environment as j2env
 from jinja2 import FileSystemLoader as j2loader
 
 # local imports
-from .config import ROOT_DIR, COMMON, SECRETS, NETS, MODEL_COLORS
+from .config import ROOT_DIR, COMMON, SECRETS, MODEL_COLORS
 
 # module logger
 log = logging.getLogger(__name__)
@@ -81,7 +81,6 @@ class Switch:
             self.mac = offline_data['mac']
             self.model = offline_data['model']
             self.location = offline_data['location']
-            self.mgmt_ip = self.ip
         else:
             # set model
             self.model = re.search(r'[A-Z]{1,3}-?[0-9]{1,4}[^ ]*|GEPON',
@@ -92,25 +91,6 @@ class Switch:
 
             # set system location
             self.location = self.get_oid('1.3.6.1.2.1.1.6.0')
-
-            # set managment ip for L3 switches, we need the first interface in
-            # snmp_walk 1.3.6.1.2.1.16.19.11.1.1
-            # but snmp_walk is slower, than hardcoded snmp_get for two models
-            if self.model == 'DXS-3600-32S':
-                o = '5120'
-            elif self.model == 'DGS-3627G':
-                o = '5121'
-            else:
-                o = None
-            if o:
-                self.mgmt_ip = netaddr.IPAddress(self.get_oid(
-                    f'1.3.6.1.2.1.16.19.11.1.1.{o}'))
-            else:
-                self.mgmt_ip = self.ip
-
-            if not self.mgmt_ip in NETS:
-                self.log.warning(
-                    f'Address {self.ip} is out of inkotel switches range')
 
             # set mac address
             # first, try via arp, second via snmp (for routed ips)
@@ -219,7 +199,7 @@ class Switch:
         else:
             model_color = MODEL_COLORS['DEFAULT']
         short_line = Fore.YELLOW + self.model + Fore.RESET + \
-            ' [' + Fore.CYAN + short_ip(self.mgmt_ip) + Fore.RESET + '] ' + \
+            ' [' + Fore.CYAN + short_ip(self.ip) + Fore.RESET + '] ' + \
             model_color + self.location + Fore.RESET + Style.RESET_ALL
 
         full_line = short_line + '\n' + \
