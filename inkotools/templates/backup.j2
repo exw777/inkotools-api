@@ -1,7 +1,7 @@
 {# backup switch config to tftp server -#}
 {# params: sw, server, path -#}
 {%- set path = path | default('backup') -%}
-{%- set ip = sw.mgmt_ip -%}
+{%- set ip = sw.ip -%}
 {%- set server = server | default('192.168.' ~ ip.words[2] ~ '.250') -%}
 {%- if sw.model == 'DES-3026' -%}
     upload configuration {{ server }} {{ path }}/{{ ip }}.cfg
