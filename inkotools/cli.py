@@ -9,17 +9,26 @@ from getpass import getpass
 from time import time
 
 # external imports
+from colorama import Fore, Back, Style
 
 # local imports
 from lib.config import COMMON, NETS, write_cfg
 from lib.db import DB
-from lib.sw import Switch, full_ip
+from lib.sw import Switch, full_ip, short_ip
 
 # module logger
 log = logging.getLogger(__name__)
 
 # init db
 db = DB(COMMON['DB_FILE'])
+
+# make model colors from colorama values
+MODEL_COLORS = {}
+for model in COMMON['MODEL_COLORS']:
+    vals = []
+    for key in COMMON['MODEL_COLORS'][model]:
+        vals.append(f"{key}.{COMMON['MODEL_COLORS'][model][key]}")
+    MODEL_COLORS[model] = eval(' + '.join(vals))
 
 
 def exit_handler(signal_received, frame):
@@ -44,6 +53,26 @@ def serve_module(module):
                 print(eval(f'{module}.{cmd}'))
             except Exception as e:
                 log.error(e)
+
+
+def sw_interact(sw):
+
+    if sw.model in MODEL_COLORS:
+        model_color = MODEL_COLORS[sw.model]
+    else:
+        model_color = MODEL_COLORS['DEFAULT']
+
+    prompt_line = Fore.YELLOW + sw.model + Fore.RESET \
+        + ' [' + Fore.CYAN + short_ip(sw.ip) + Fore.RESET + '] ' \
+        + model_color + sw.location + Fore.RESET + Style.RESET_ALL
+
+    # set terminal title
+    term_title = f'[{short_ip(sw.ip)}] {sw.location}'
+    print(f'\33]0;{term_title}\a', end='', flush=True)
+
+    print(prompt_line)
+    sw.interact()
+    print('\nInteraction completed')
 
 
 def update_database():
@@ -118,7 +147,7 @@ def main():
             exit(e)
         try:
             if ARGS.interact:
-                sw.interact()
+                sw_interact(sw)
             else:
                 serve_module('sw')
         except Switch.CredentialsError as e:

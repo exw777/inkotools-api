@@ -12,13 +12,12 @@ from time import time
 # external imports
 import netaddr
 import pexpect
-from colorama import Fore, Back, Style
 from icmplib import ping as icmp_ping
 from jinja2 import Environment as j2env
 from jinja2 import FileSystemLoader as j2loader
 
 # local imports
-from .config import ROOT_DIR, COMMON, SECRETS, MODEL_COLORS
+from .config import ROOT_DIR, COMMON, SECRETS
 
 # module logger
 log = logging.getLogger(__name__)
@@ -187,26 +186,6 @@ class Switch:
         return snmp_get(oid, hostname=str(self.ip),
                         version=2, timeout=3).value
 
-    def show(self, full=False):
-        """Print short switch description
-
-        Arguments:
-
-        full: Boolean. If set, print additional line with mac address.
-        """
-        if self.model in MODEL_COLORS:
-            model_color = MODEL_COLORS[self.model]
-        else:
-            model_color = MODEL_COLORS['DEFAULT']
-        short_line = Fore.YELLOW + self.model + Fore.RESET + \
-            ' [' + Fore.CYAN + short_ip(self.ip) + Fore.RESET + '] ' + \
-            model_color + self.location + Fore.RESET + Style.RESET_ALL
-
-        full_line = short_line + '\n' + \
-            Fore.RESET + Style.DIM + str(self.mac) + Style.RESET_ALL
-
-        return short_line if not full else full_line
-
     def _telnet(self):
         """Connect via telnet and keep connection in returned object"""
 
@@ -278,12 +257,7 @@ class Switch:
         if not tn:
             self.log.debug('telnet object is empty')
             return None
-        print(self.show())
-        # set terminal title
-        term_title = f'[{short_ip(self.ip)}] {self.location}'
-        print(f'\33]0;{term_title}\a', end='', flush=True)
         tn.interact()
-        print('\nInteraction completed')
 
     def send(self, commands=[], template=None, **kwargs):
         """Send commands to switch

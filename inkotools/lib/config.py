@@ -9,7 +9,6 @@ import pathlib
 import yaml
 
 # external imports
-from colorama import Fore, Back, Style
 import netaddr
 
 # module logger
@@ -95,11 +94,3 @@ COMMON = load_cfg('common')
 NETS = netaddr.IPSet()
 for net in COMMON['NETS']:
     NETS.add(netaddr.IPRange(net['start'], net['end']))
-
-# make model colors from colorama values
-MODEL_COLORS = {}
-for model in COMMON['MODEL_COLORS']:
-    vals = []
-    for key in COMMON['MODEL_COLORS'][model]:
-        vals.append(f"{key}.{COMMON['MODEL_COLORS'][model][key]}")
-    MODEL_COLORS[model] = eval(' + '.join(vals))
