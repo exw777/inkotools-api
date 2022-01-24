@@ -4,6 +4,7 @@
 # internal imports
 import asyncio
 import concurrent.futures
+import inspect
 import logging
 import re
 import socket
@@ -156,6 +157,13 @@ class Switch:
     class CredentialsError(Exception):
         """Custom exception on wrong creds"""
         pass
+
+    def help(self):
+        methods = {}
+        for m in inspect.getmembers(self, inspect.ismethod):
+            if not m[0].startswith('_'):
+                methods[m[0]] = str(inspect.signature(eval(f'self.{m[0]}')))
+        return methods
 
     def is_alive(self):
         """Check if switch is available
