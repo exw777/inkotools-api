@@ -20,8 +20,7 @@ conf t
     exit
 end
         {%- endif -%}
-    {%- elif 'DES' in sw.model or sw.model in ['DGS-1210-28X/ME/B1',
-                                                'DGS-3000-26TC'] -%}
+    {%- elif 'DES' in sw.model or 'DGS' in sw.model -%}
         {%- if state is not defined -%}
             sh ports {{ port }} desc
         {%- else -%}

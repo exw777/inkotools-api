@@ -159,6 +159,7 @@ class Switch:
         pass
 
     def help(self):
+        """List all public methods with args"""
         methods = {}
         for m in inspect.getmembers(self, inspect.ismethod):
             if not m[0].startswith('_'):
@@ -416,18 +417,98 @@ class Switch:
             return None
 
     def get_port_state(self, port: int):
+        """Get port state
+
+        Returns:
+            list of dicts with len 1 for simple ports and 2 for combo
+            None - on error
+
+        Dict:
+            port: int           - port number
+            type: str           - fiber or copper for combo ports
+            state: bool         - administrative state
+            speed: str          - port speed settings
+            link: bool          - link status
+            status: str         - link speed
+            learning: bool      - mac learning state
+            autodowngrade: bool - speed conf state on DGS switches
+
+        """
+        port = int(port)
+        if not port in (self.access_ports + self.transit_ports):
+            self.log.error(f'port {port} out of range')
+            return None
+
         try:
-            result = self.send(template='port_state.j2', port=port)
+            raw = self.send(template='port_state.j2', port=port)
         except Exception as e:
             self.log.error(f'port {port} failed: {e}')
             return None
-        if not result:
+        if not raw:
             return None
+
+        if re.search('QSW', self.model):
+            # q-tech
+            # Not working yet
+            return None
+        elif re.search('DES|DGS', self.model):
+            # d-link
+            rgx = (
+                r'(?P<port>\d{1,2})(?:\s*\((?P<type>C|F)\))?\s+'
+                r'(?P<state>Enabled|Disabled)\s+'
+                r'(?P<speed>Auto|10+\w/(?:Full|Half))/Disabled\s+'
+                r'(?P<link>Link ?Down|10+\w/(?:Full|Half))(?:/\w+)?\s+'
+                r'(?P<learning>Enabled|Disabled)\s+'
+                r'(?P<autodowngrade>Enabled|Disabled|-)?'
+                r'(?s:.*?)Desc[a-z]*: +(?P<desc>[\w "]*[\w"])?'
+            )
+            try:
+                result = [m.groupdict() for m in re.finditer(rgx, raw)]
+            except Exception as e:
+                log.error(f'port {port} - regex parse failed: {e}')
+                return raw
+            # convert values
+            for res in result:
+                if re.search('3000|DGS-1210', self.model):
+                    res['autodowngrade'] = str_to_bool(res['autodowngrade'])
+                else:
+                    # on 3526 this field is trap
+                    res['autodowngrade'] = None
+                if re.search(r'(?i:down)', res['link']):
+                    res['link'] = False
+                    res['status'] = None
+                else:
+                    res['status'] = res['link']
+                    res['link'] = True
+                res['state'] = str_to_bool(res['state'])
+                res['learning'] = str_to_bool(res['learning'])
+
+            return result
+
+    def get_ports_state(self, ports: list = []):
+        """Get multiple ports state
+
+        if ports arg is ommited, returns all ports
+        """
+        if not ports:
+            ports = self.access_ports + self.transit_ports
+
+        # Processing ports one by one because pagination
+        # is implemented differently on different switches.
+        result = []
+        for port in ports:
+            res = self.get_port_state(port=port)
+            if isinstance(res, list):
+                result += self.get_port_state(port=port)
+            else:
+                result.append(res)
+
         return result
 
     def set_port_state(
             self, port: int, state: bool,
             comment: str = "", clear_comment: bool = False):
+        """Dummy function, need to rework"""
 
         if comment == "" and not clear_comment:
 
@@ -719,7 +800,7 @@ class Switch:
         ports - if ommited, all ports are used"""
 
         if not ports:
-            ports = self.access_ports+self.transit_ports
+            ports = self.access_ports + self.transit_ports
 
         result = []
         for port in ports:
@@ -974,6 +1055,16 @@ def interval_to_list(s):
     l = list(set(l))
     l.sort()
     return l
+
+
+def str_to_bool(s):
+    """Convert enabled/disabled values to boolean"""
+    if re.search(r'(?i:enable|true|up)', s):
+        return True
+    elif re.search(r'(?i:disable|false|down)', s):
+        return False
+    else:
+        return None
 
 
 async def batch_async(sw_list, func, external=False, max_workers=1024):
