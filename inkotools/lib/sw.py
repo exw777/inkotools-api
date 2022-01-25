@@ -482,6 +482,7 @@ class Switch:
                     res['link'] = True
                 res['state'] = str_to_bool(res['state'])
                 res['learning'] = str_to_bool(res['learning'])
+                res['port'] = int(res['port'])
 
             return result
 
