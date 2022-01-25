@@ -127,14 +127,17 @@ def sw_ip_func(ip, func):
         return f'{ip} is not available\n', 404
     data = request.json
     log.debug(f'[{ip}] request func: {func}, data: {data}')
-    if not func in sw.help():
-        return 'wrong function', 400
-    try:
-        if data is None:
-            result = eval(f'sw.{func}()')
-        else:
-            result = eval(f'sw.{func}(**data)')
-    except Exception as e:
-        return f'{e}\n', 500
+    # first check properties
+    if func in sw.__dict__:
+        result = eval(f'sw.{func}')
+    elif not func in sw.help():
+        return 'wrong function\n', 400
     else:
-        return jsonify(result)
+        try:
+            if data is None:
+                result = eval(f'sw.{func}()')
+            else:
+                result = eval(f'sw.{func}(**data)')
+        except Exception as e:
+            return f'{e}\n', 500
+    return jsonify(result)
