@@ -6,6 +6,7 @@ import logging
 
 # external imports
 from flask import Flask, request, jsonify
+from netaddr import valid_glob as valid_ip
 
 # local imports
 from lib.config import COMMON
@@ -42,6 +43,16 @@ def get_sw_instance(ip):
             return None
         SWITCHES[ip] = sw
     return sw
+
+
+def json_err(title, status=None, detail=None):
+    """Returns error according to json api standart"""
+    args = locals()
+    err = {}
+    for k, v in args.items():
+        if v is not None:
+            err[k] = str(v)
+    return jsonify(errors=[err])
 
 
 @app.route('/db/list')
@@ -104,40 +115,51 @@ def db_sw_add(ip):
         return 501
 
 
-@app.route('/sw/<ip>', methods=['GET'])
+@app.route('/sw/<ip>/', methods=['GET'])
 def sw_ip(ip):
+    if not valid_ip(ip):
+        return json_err('Invalid ip address', 400), 400
     try:
         data = db.get(ip)
         sw = get_sw_instance(ip)
     except Exception as e:
-        return f'{e}\n', 500
+        return json_err("Server error", 500, e), 500
     if sw is None and data is None:
-        return f'{ip} not found\n', 404
+        return json_err('Switch not found', 404), 404
     status = False
     if sw is not None:
         status = sw.is_alive()
     data['status'] = status
-    return jsonify(data)
+    return jsonify(data=data)
 
+
+# TODO: api routes based on functions
 
 @app.route('/sw/<ip>/<func>', methods=['GET', 'POST'])
 def sw_ip_func(ip, func):
+    if not valid_ip(ip):
+        return json_err('Invalid ip address', 400), 400
     sw = get_sw_instance(ip)
     if sw is None:
-        return f'{ip} is not available\n', 404
-    data = request.json
-    log.debug(f'[{ip}] request func: {func}, data: {data}')
-    # first check properties
+        return json_err('Switch not found', 404), 404
+
+    func_args = request.json
+    log.debug(f'[{ip}] request func: {func}, args: {func_args}')
+
+    # first check if func is sw property
     if func in sw.__dict__:
         result = eval(f'sw.{func}')
     elif not func in sw.help():
-        return 'wrong function\n', 400
+        return json_err('Wrong function', 400), 400
     else:
         try:
-            if data is None:
+            if func_args is None:
                 result = eval(f'sw.{func}()')
             else:
-                result = eval(f'sw.{func}(**data)')
+                result = eval(f'sw.{func}(**func_args)')
+        except TypeError as e:
+            return json_err("Type error", 400, e), 400
         except Exception as e:
-            return f'{e}\n', 500
-    return jsonify(result)
+            return json_err("Server error", 500, e), 500
+
+    return jsonify(data=result)
