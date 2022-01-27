@@ -81,7 +81,8 @@ class DB:
 
     def _open(self):
         try:
-            self._connection = sqlite3.connect(self.db_file, check_same_thread=False)
+            self._connection = sqlite3.connect(
+                self.db_file, check_same_thread=False)
             # use output in sqlite3.Row instead of tuple
             self._connection.row_factory = sqlite3.Row
             self._cursor = self._connection.cursor()
@@ -136,7 +137,7 @@ class DB:
             sw = namedtuple('Switch', sw)(**sw)
 
         query = self.UPSERT.format(
-            ip=int(netaddr.IPAddress(sw.ip)),
+            ip=int(netaddr.IPAddress(str(sw.ip))),
             mac=netaddr.EUI(sw.mac).format(netaddr.mac_bare),
             model=sw.model,
             location=sw.location
@@ -170,7 +171,7 @@ class DB:
         Returns: dict of strings (ip, mac, model, location)
         """
         query = "SELECT * from switches WHERE ip = '{ip}';".format(
-            ip=int(netaddr.IPAddress(sw_ip)))
+            ip=int(netaddr.IPAddress(str(sw_ip))))
         result = self._exec(query).fetchone()
         if result is not None:
             return self._row_format(result)
@@ -186,7 +187,7 @@ class DB:
             0 - Skipped (no changes)
         """
         query = "DELETE from switches WHERE ip = '{ip}';".format(
-            ip=int(netaddr.IPAddress(sw_ip)))
+            ip=int(netaddr.IPAddress(str(sw_ip))))
         result = self._exec(query)
         if result is not None:
             if result.rowcount == 0:

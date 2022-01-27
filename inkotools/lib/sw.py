@@ -63,7 +63,7 @@ class Switch:
         self.log = logging.getLogger(str(ip))
 
         # set ip address
-        self.ip = netaddr.IPAddress(ip)
+        self.ip = netaddr.IPAddress(str(ip))
 
         # check availability
         if not self.is_alive():
