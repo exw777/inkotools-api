@@ -37,7 +37,7 @@ EXPOSE $LISTEN_PORT
 
 ENTRYPOINT ["/entrypoint.sh"]
 
-CMD ["gunicorn", "wsgi:app"]
+CMD ["gunicorn", "asgi:app"]
 
 COPY entrypoint.sh /
 RUN chmod +x /entrypoint.sh
