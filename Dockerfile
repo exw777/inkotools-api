@@ -9,7 +9,16 @@ RUN apk update && apk add --update-cache \
         libc-dev \
         build-base \
         net-snmp-dev && \
-    pip install --target=/deps -r /requirements.txt
+    pip install --no-cache-dir \
+        Cython \
+        devtools \
+        pip \
+        setuptools && \
+    pip install \
+        --no-cache-dir \
+        --no-binary pydantic\
+        --target=/deps \
+        -r /requirements.txt
 
 FROM base 
 WORKDIR /app/
