@@ -4,29 +4,11 @@ version: 1
 formatters:
   colorlog:
     (): 'colorlog.ColoredFormatter'
-    format: "[%(bold_white)s%(name)s%(reset)s|\
-            %(log_color)s%(levelname)s%(reset)s] \
-            %(thin_white)s%(funcName)s%(reset)s: \
-            %(message_log_color)s%(message)s%(reset)s"
-    log_colors:
-      DEBUG: cyan
-      INFO: green
-      WARNING: yellow
-      ERROR: red
-      CRITICAL: light_red
-    secondary_log_colors:
-      message:
-        DEBUG: thin_white
-        INFO: white
-        WARNING: white
-        ERROR: yellow
-        CRITICAL: yellow
-  colortime:
-    (): 'colorlog.ColoredFormatter'
     format: "[%(asctime)s] [%(log_color)s%(levelname)s%(reset)s] \
             [%(bold_white)s%(name)s%(reset)s] \
             [%(thin_white)s%(funcName)s%(reset)s] \
             %(message_log_color)s%(message)s%(reset)s"
+    datefmt: '%Y-%m-%d %H:%M:%S'
     log_colors:
       DEBUG: cyan
       INFO: green
@@ -41,19 +23,14 @@ formatters:
         ERROR: yellow
         CRITICAL: yellow
 handlers:
-  colour:
+  console:
     class: logging.StreamHandler
     formatter: colorlog
-  colortime:
-    class: logging.StreamHandler
-    formatter: colortime
 loggers:
   '':
     level: INFO
-    handlers: [colour]
-  'wsgi':
-    level: INFO
-    handlers: [colortime]
-    propagate: false
+    handlers: [console]
+  uvicorn:
+    propagate: true
 disable_existing_loggers: false
 ...
