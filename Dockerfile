@@ -7,6 +7,7 @@ COPY requirements.txt /
 RUN apk update && apk add --update-cache \
         gcc \
         libc-dev \
+        build-base \
         net-snmp-dev && \
     pip install --target=/deps -r /requirements.txt
 
