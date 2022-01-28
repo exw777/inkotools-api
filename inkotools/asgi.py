@@ -7,6 +7,8 @@ from ipaddress import IPv4Address
 
 # external imports
 from fastapi import FastAPI, HTTPException
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 # local imports
@@ -56,6 +58,14 @@ def get_sw_instance(sw_ip):
                 status_code=503, detail=f'{sw_ip} is not available')
     else:
         return sw
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc):
+    """Override validation errors formatting"""
+    detail = ', '.join(
+        map(lambda err: err["loc"][1]+' - ' + err["msg"], exc.errors()))
+    return JSONResponse({"detail": detail}, status_code=422)
 
 
 class SearchModel(BaseModel):
