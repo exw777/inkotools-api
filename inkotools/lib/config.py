@@ -18,8 +18,9 @@ log = logging.getLogger(__name__)
 ROOT_DIR = pathlib.Path(__file__).parents[1]
 
 
-def cfg_file(cfg_name):
-    return (ROOT_DIR/'config').joinpath(cfg_name).with_suffix('.yml')
+def cfg_file(cfg_name, default=False):
+    sub = 'default' if default else 'user'
+    return (ROOT_DIR/'config'/sub).joinpath(cfg_name).with_suffix('.yml')
 
 
 def load_yml(file):
@@ -27,13 +28,11 @@ def load_yml(file):
     try:
         result = yaml.safe_load(file.read_text())
     except FileNotFoundError:
-        # log.debug(f'{file.name} not found')
         return {}
     except Exception as e:
         log.error(f'{file.name}: {e}')
         return None
     else:
-        # log.debug(f'{file.name} loaded')
         return result
 
 
@@ -49,14 +48,12 @@ def dict_merge(orig, upd):
 
 def load_cfg(cfg_name, force_default=False):
     """Load configuration"""
-    conf = cfg_file(cfg_name)
-    conf_default = conf.with_suffix('.default.yml')
     # first, load from default
-    res_default = load_yml(conf_default)
+    res_default = load_yml(cfg_file(cfg_name, default=True))
     if force_default:
         return res_default
     # load user config and merge
-    res_user = load_yml(conf)
+    res_user = load_yml(cfg_file(cfg_name))
     result = dict_merge(res_default, res_user)
     if not result:
         log.error(f'{cfg_name} failed')
