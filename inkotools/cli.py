@@ -12,7 +12,7 @@ from time import time
 from colorama import Fore, Back, Style
 
 # local imports
-from lib.config import COMMON, NETS, write_cfg
+from lib.cfg import COMMON, NETS, write_cfg
 from lib.db import DB
 from lib.sw import Switch, full_ip, short_ip
 

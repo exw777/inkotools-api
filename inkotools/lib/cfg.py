@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# lib/config.py
+# lib/cfg.py
 
 # internal imports
 import collections.abc

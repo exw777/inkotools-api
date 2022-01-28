@@ -18,7 +18,7 @@ from jinja2 import Environment as j2env
 from jinja2 import FileSystemLoader as j2loader
 
 # local imports
-from .config import ROOT_DIR, COMMON, SECRETS
+from .cfg import ROOT_DIR, COMMON, SECRETS
 
 # module logger
 log = logging.getLogger(__name__)

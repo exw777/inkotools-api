@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 # local imports
-from lib.config import COMMON
+from lib.cfg import COMMON
 from lib.db import DB
 from lib.sw import Switch
 

@@ -11,7 +11,7 @@ from collections import namedtuple
 import netaddr
 
 # local imports
-from .config import ROOT_DIR
+from .cfg import ROOT_DIR
 
 # module logger
 log = logging.getLogger(__name__)
