@@ -26,7 +26,7 @@ WORKDIR /app/
 RUN mkdir /app/data/ && \
     chown 1000:1000 /app/data/
 
-VOLUME ["/app/data/", "/app/config/"]
+VOLUME ["/app/data", "/app/config/user"]
 
 RUN apk update && apk add --no-cache \
         su-exec \
