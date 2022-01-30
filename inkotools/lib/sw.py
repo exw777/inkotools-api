@@ -447,43 +447,67 @@ class Switch:
         if not raw:
             return None
 
-        if re.search('QSW', self.model):
-            # q-tech
-            # Not working yet
-            return None
-        elif re.search('DES|DGS', self.model):
-            # d-link
-            rgx = (
-                r'(?P<port>\d{1,2})(?:\s*\((?P<type>C|F)\))?\s+'
-                r'(?P<state>Enabled|Disabled)\s+'
-                r'(?P<speed>Auto|10+\w/(?:Full|Half))/Disabled\s+'
-                r'(?P<link>Link ?Down|10+\w/(?:Full|Half))(?:/\w+)?\s+'
-                r'(?P<learning>Enabled|Disabled)\s+'
-                r'(?P<autodowngrade>Enabled|Disabled|-)?'
-                r'(?s:.*?)Desc[a-z]*: +(?P<desc>[\w "]*[\w"])?'
-            )
-            try:
-                result = [m.groupdict() for m in re.finditer(rgx, raw)]
-            except Exception as e:
-                log.error(f'port {port} - regex parse failed: {e}')
-                return raw
-            # convert values
-            for res in result:
-                if re.search('3000|DGS-1210', self.model):
-                    res['autodowngrade'] = str_to_bool(res['autodowngrade'])
+        try:
+            if re.search('QSW', self.model):
+                # q-tech
+                rgx = (
+                    r'Ethernet1/(?P<port>\d+) is (?P<state>[\w ]+)'
+                    r', line protocol is (?P<link>\w+)(?s:.*)'
+                    r'alias name is (?P<desc>[\(\)\w ]+),(?s:.*)'
+                    r'\s (?P<speed>[\w ,:-]+)\s+Flow'
+                )
+                res = re.search(rgx, raw).groupdict()
+                # some magic to convert values in same format as dlink
+                res['state'] = False if re.search(
+                    'admin', res['state']) else True
+                res['link'] = str_to_bool(res['link'])
+                if res['desc'] == '(null)':
+                    res['desc'] = None
+                r = r'(?:Negotiation|Force) (\w+)'
+                res['status'] = '/'.join(reversed(re.findall(r, res['speed'])))
+                if re.search('Auto', res['speed']):
+                    res['speed'] = 'Auto'
                 else:
-                    # on 3526 this field is trap
-                    res['autodowngrade'] = None
-                if re.search(r'(?i:down)', res['link']):
-                    res['link'] = False
+                    res['speed'] = res['status']
+                if not res['link']:
                     res['status'] = None
-                else:
-                    res['status'] = res['link']
-                    res['link'] = True
-                res['state'] = str_to_bool(res['state'])
-                res['learning'] = str_to_bool(res['learning'])
-                res['port'] = int(res['port'])
 
+                result = [res]
+
+            elif re.search('DES|DGS', self.model):
+                # d-link
+                rgx = (
+                    r'(?P<port>\d{1,2})(?:\s*\((?P<type>C|F)\))?\s+'
+                    r'(?P<state>Enabled|Disabled)\s+'
+                    r'(?P<speed>Auto|10+\w/(?:Full|Half))/Disabled\s+'
+                    r'(?P<link>Link ?Down|10+\w/(?:Full|Half))(?:/\w+)?\s+'
+                    r'(?P<learning>Enabled|Disabled)\s+'
+                    r'(?P<autodowngrade>Enabled|Disabled|-)?'
+                    r'(?s:.*?)Desc[a-z]*: +(?P<desc>[\w "]*[\w"])?'
+                )
+                result = [m.groupdict() for m in re.finditer(rgx, raw)]
+                # convert values
+                for res in result:
+                    if re.search('3000|DGS-1210', self.model):
+                        res['autodowngrade'] = str_to_bool(
+                            res['autodowngrade'])
+                    else:
+                        # on 3526 this field is trap
+                        res['autodowngrade'] = None
+                    if re.search(r'(?i:down)', res['link']):
+                        res['link'] = False
+                        res['status'] = None
+                    else:
+                        res['status'] = res['link']
+                        res['link'] = True
+                    res['state'] = str_to_bool(res['state'])
+                    res['learning'] = str_to_bool(res['learning'])
+                    res['port'] = int(res['port'])
+
+        except Exception as e:
+            log.error(f'port {port} - regex parse failed: {e}')
+            return raw
+        else:
             return result
 
     def get_ports_state(self, ports: list = []):
@@ -722,6 +746,7 @@ class Switch:
         for vid in vid_list:
             self.delete_vlan(vid)
 
+    # TODO: return untagged as list and check overlapping on higher level
     def get_vlan_port(self, port):
         """Get vlan information from port
 
@@ -737,7 +762,7 @@ class Switch:
         # check port is valid
         if port and not int(port) in (self.access_ports + self.transit_ports):
             self.log.error(f'port {port} out of range')
-            return False
+            return None
 
         try:
             result_raw = self.send(template='vlan_port.j2', port=port)
@@ -1022,6 +1047,46 @@ class Switch:
                 else:
                     self.delete_vlan_port(port=port, vid=vid)
 
+    def check_cable(self, port: int):
+        """Make cable diagnostic on port"""
+        if not port in self.access_ports:
+            self.log.error(f'port {port} is out of access ports range')
+            return None
+        # get raw result
+        if re.search('QSW', self.model):
+            raw = self.send(f'virtual-cable-test interface ethernet 1/{port}')
+        elif (re.search('DES|3000', self.model)
+              and not re.search('3026|F', self.model)):
+            raw = self.send(f'cable_diag ports {port}')
+        elif self.model == 'DGS-1210-28X/ME/B1':
+            raw = self.send(f'cable diagnostic port {port}')
+        else:
+            return None
+        # parse raw result
+        if re.search('QSW', self.model):
+            rgx = r'\)\t\t(?P<state>\w+)\t\t(?P<len>\w+)'
+            pairs = [m.groupdict() for m in re.finditer(rgx, raw)]
+            for i in range(len(pairs)):
+                pairs[i]['pair'] = i+1
+                pairs[i]['len'] = int(pairs[i]['len'])
+            return pairs
+        else:
+            # first check multiline pair status
+            rgx = r'Pair *(?P<pair>\d) +(?P<state>\w+) +at +(?P<len>\d+)'
+            pairs = [m.groupdict() for m in re.finditer(rgx, raw)]
+            for p in pairs:
+                p['pair'] = int(p['pair'])
+                p['len'] = int(p['len'])
+
+            # if no multiline result - return single string status
+            if pairs == []:
+                rgx = r'Link \w+\s+([\w ]+\w) +-'
+                state = re.findall(rgx, raw)
+                if len(state) > 0:
+                    return state[0]
+                return None
+            return pairs
+
 
 ########################################################################
 # common functions
@@ -1082,12 +1147,12 @@ async def batch_async(sw_list, func, external=False, max_workers=1024):
 
     Optional arguments:
 
-        external:   boolean value, if set to True, external function 
+        external:   boolean value, if set to True, external function
                     expected in 'func' argument. Required arg is 'sw',
                     which is Switch class instance.
                     default: False
 
-     max_workers:   max count of parallel threads used in asyncio 
+     max_workers:   max count of parallel threads used in asyncio
                     default: 1024
     """
 

@@ -200,6 +200,15 @@ def switch_get_port_summary(sw_ip: IPv4Address, port_id: int):
     if result is None:
         raise HTTPException(
             status_code=500, detail=f'failed to get port summary')
+    elif (isinstance(result[0], dict)
+          and not result[0]['link']
+          and port_id in sw.access_ports):
+        cable = sw.check_cable(port_id)
+        if isinstance(cable, str):
+            result[0]['status'] = cable
+        else:
+            result[0]['cable'] = cable
+
     return fmt_result(result)
 
 
