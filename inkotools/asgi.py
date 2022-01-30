@@ -69,6 +69,17 @@ def fmt_result(data, meta=None):
     return {"data": data}
 
 
+def validate_port(sw: Switch, port_id: int):
+    """Check if port is in switch ports range"""
+    ports_range = sw.access_ports + sw.transit_ports
+    if len(ports_range) == 0:
+        raise HTTPException(
+            status_code=422, detail=f'{sw.model} not supported')
+    if port_id not in ports_range:
+        raise HTTPException(
+            status_code=422, detail=f'port {port_id} is out of range')
+
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request, exc):
     """Override validation errors formatting"""
@@ -174,9 +185,8 @@ def switch_backup(sw_ip: IPv4Address):
 @app.get('/sw/{sw_ip}/ports/')
 def switch_get_ports_list(sw_ip: IPv4Address):
     sw = get_sw_instance(sw_ip)
-    if len(sw.access_ports + sw.transit_ports) == 0:
-        raise HTTPException(
-            status_code=422, detail=f'{sw.model} not supported')
+    # check that switch has at least one port
+    validate_port(sw, 1)
     data = {"access_ports": sw.access_ports,
             "transit_ports": sw.transit_ports}
     return fmt_result(data)
@@ -185,15 +195,23 @@ def switch_get_ports_list(sw_ip: IPv4Address):
 @app.get('/sw/{sw_ip}/ports/{port_id}/')
 def switch_get_port_summary(sw_ip: IPv4Address, port_id: int):
     sw = get_sw_instance(sw_ip)
-    ports_range = sw.access_ports + sw.transit_ports
-    if len(ports_range) == 0:
-        raise HTTPException(
-            status_code=422, detail=f'{sw.model} not supported')
-    if port_id not in ports_range:
-        raise HTTPException(
-            status_code=422, detail=f'port {port_id} is out of range')
+    validate_port(sw, port_id)
     result = sw.get_port_state(port_id)
     if result is None:
         raise HTTPException(
             status_code=500, detail=f'failed to get port summary')
+    return fmt_result(result)
+
+
+@app.get('/sw/{sw_ip}/ports/{port_id}/vlan')
+def switch_get_port_vlans(sw_ip: IPv4Address, port_id: int):
+    sw = get_sw_instance(sw_ip)
+    validate_port(sw, port_id)
+    result = sw.get_vlan_port(port_id)
+    if result is None:
+        raise HTTPException(
+            status_code=500, detail=f'failed to get port vlan')
+    elif result == False:
+        raise HTTPException(
+            status_code=409, detail=f'probably untagged ports overlapping')
     return fmt_result(result)
