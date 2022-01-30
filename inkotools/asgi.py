@@ -60,6 +60,15 @@ def get_sw_instance(sw_ip):
         return sw
 
 
+def fmt_result(data, meta=None):
+    """Format value according to internal api standart"""
+    if isinstance(data, str):
+        return {"detail": data}
+    if meta is not None:
+        return {"data": data, "meta": meta}
+    return {"data": data}
+
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request, exc):
     """Override validation errors formatting"""
@@ -75,7 +84,7 @@ class SearchModel(BaseModel):
 @app.post('/db/search')
 def database_search(search: SearchModel):
     data = db.search(search.keyword)
-    return {"data": data, "meta": {"count": len(data)}}
+    return fmt_result(data, meta={"count": len(data)})
 
 
 @app.get('/db/sw/{sw_ip}/')
@@ -84,16 +93,16 @@ def database_get_switch(sw_ip: IPv4Address):
     if result is None:
         raise HTTPException(
             status_code=404, detail=f'{sw_ip} not found')
-    return {"data": result}
+    return fmt_result(result)
 
 
 @app.delete('/db/sw/{sw_ip}/')
 def database_delete_switch(sw_ip: IPv4Address):
     result = db.delete(sw_ip)
     if result == 0:
-        return {"details": f'{sw_ip} skipped (not found)'}
+        return fmt_result(f'{sw_ip} skipped (not found)')
     elif result == 1:
-        return {"details": f'{sw_ip} removed from database'}
+        return fmt_result(f'{sw_ip} removed from database')
     else:
         raise HTTPException(
             status_code=500, detail=f'failed to remove {sw_ip}')
@@ -107,9 +116,9 @@ def database_add_switch(sw_ip: IPv4Address):
             status_code=404, detail=f'{sw_ip} is not available')
     result = db.add(sw)
     if result == 0:
-        return {"details": f'{sw_ip} skipped (no changes)'}
+        return fmt_result(f'{sw_ip} skipped (no changes)')
     elif result == 1:
-        return {"details": f'{sw_ip} added to database'}
+        return fmt_result(f'{sw_ip} added to database')
     else:
         raise HTTPException(
             status_code=500, detail=f'failed to add {sw_ip}')
@@ -139,7 +148,7 @@ def switch_get_summary(sw_ip: IPv4Address):
         raise HTTPException(
             status_code=404, detail=f'{sw_ip} not found')
     data['status'] = status
-    return {"data": data}
+    return fmt_result(data)
 
 
 @app.get('/sw/{sw_ip}/save')
@@ -149,7 +158,7 @@ def switch_save(sw_ip: IPv4Address):
     if result is None:
         raise HTTPException(
             status_code=500, detail=f'failed to save {sw_ip}')
-    return {"details": result}
+    return fmt_result(result)
 
 
 @app.get('/sw/{sw_ip}/backup')
@@ -159,7 +168,7 @@ def switch_backup(sw_ip: IPv4Address):
     if result is None:
         raise HTTPException(
             status_code=500, detail=f'failed to backup {sw_ip}')
-    return {"details": result}
+    return fmt_result(result)
 
 
 @app.get('/sw/{sw_ip}/ports/')
@@ -170,7 +179,7 @@ def switch_get_ports_list(sw_ip: IPv4Address):
             status_code=422, detail=f'{sw.model} not supported')
     data = {"access_ports": sw.access_ports,
             "transit_ports": sw.transit_ports}
-    return {"data": data}
+    return fmt_result(data)
 
 
 @app.get('/sw/{sw_ip}/ports/{port_id}/')
@@ -187,4 +196,4 @@ def switch_get_port_summary(sw_ip: IPv4Address, port_id: int):
     if result is None:
         raise HTTPException(
             status_code=500, detail=f'failed to get port summary')
-    return {"data": result}
+    return fmt_result(result)
