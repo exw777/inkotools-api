@@ -471,6 +471,9 @@ class Switch:
                     res['speed'] = res['status']
                 if not res['link']:
                     res['status'] = None
+                res['port'] = int(res['port'])
+                # workaround for frontend alarm
+                res['learning'] = True
 
                 result = [res]
 
