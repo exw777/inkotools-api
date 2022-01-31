@@ -1090,6 +1090,15 @@ class Switch:
                 return None
             return pairs
 
+    def clear_errors(self, port: int):
+        """Clear counters on port"""
+        if re.search('DES|DGS', self.model):
+            result = self.send(f'clear counters ports {port}')
+            if re.search(r'[Ss]uccess', result):
+                result = 'Success'
+        else:
+            result = f'Model {self.model} not supported'
+        return result
 
 ########################################################################
 # common functions

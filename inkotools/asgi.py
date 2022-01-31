@@ -224,3 +224,10 @@ def switch_get_port_vlans(sw_ip: IPv4Address, port_id: int):
         raise HTTPException(
             status_code=409, detail=f'probably untagged ports overlapping')
     return fmt_result(result)
+
+
+@app.delete('/sw/{sw_ip}/ports/{port_id}/errors')
+def switch_clear_port_errors(sw_ip: IPv4Address, port_id: int):
+    sw = get_sw_instance(sw_ip)
+    validate_port(sw, port_id)
+    return fmt_result(sw.clear_errors(port_id))
