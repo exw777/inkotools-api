@@ -1051,7 +1051,9 @@ class Switch:
                     self.delete_vlan_port(port=port, vid=vid)
 
     def check_cable(self, port: int):
-        """Make cable diagnostic on port"""
+        """Make cable diagnostic on port
+
+        if len is not available, returns int 666 ;)"""
         if not port in self.access_ports:
             self.log.error(f'port {port} is out of access ports range')
             return None
@@ -1071,15 +1073,21 @@ class Switch:
             pairs = [m.groupdict() for m in re.finditer(rgx, raw)]
             for i in range(len(pairs)):
                 pairs[i]['pair'] = i+1
-                pairs[i]['len'] = int(pairs[i]['len'])
+                try:
+                    pairs[i]['len'] = int(pairs[i]['len'])
+                except Exception:
+                    pairs[i]['len'] = 666
             return pairs
         else:
             # first check multiline pair status
-            rgx = r'Pair *(?P<pair>\d) +(?P<state>\w+) +at +(?P<len>\d+)'
+            rgx = r'Pair *(?P<pair>\d) +(?P<state>\w+) +(?:at +)?(?P<len>\d+)?'
             pairs = [m.groupdict() for m in re.finditer(rgx, raw)]
             for p in pairs:
                 p['pair'] = int(p['pair'])
-                p['len'] = int(p['len'])
+                try:
+                    p['len'] = int(p['len'])
+                except Exception:
+                    p['len'] = 666
 
             # if no multiline result - return single string status
             if pairs == []:
