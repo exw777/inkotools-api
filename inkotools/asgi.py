@@ -249,8 +249,15 @@ def switch_get_port_vlan(sw_ip: IPv4Address, port_id: int):
     return fmt_result(result)
 
 
-@app.delete('/sw/{sw_ip}/ports/{port_id}/errors')
-def switch_clear_port_errors(sw_ip: IPv4Address, port_id: int):
+@app.get('/sw/{sw_ip}/ports/{port_id}/counters')
+def switch_get_port_counters(sw_ip: IPv4Address, port_id: int):
     sw = get_sw_instance(sw_ip)
     validate_port(sw, port_id)
-    return fmt_result(sw.clear_errors(port_id))
+    return fmt_result(sw.get_port_counters(port_id))
+
+
+@app.delete('/sw/{sw_ip}/ports/{port_id}/counters')
+def switch_clear_port_counters(sw_ip: IPv4Address, port_id: int):
+    sw = get_sw_instance(sw_ip)
+    validate_port(sw, port_id)
+    return fmt_result(sw.clear_port_counters(port_id))

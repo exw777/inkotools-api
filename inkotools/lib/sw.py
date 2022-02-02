@@ -1119,15 +1119,41 @@ class Switch:
                 return None
             return pairs
 
-    def clear_errors(self, port: int):
+    def clear_port_counters(self, port: int):
         """Clear counters on port"""
         if re.search('DES|DGS', self.model):
             result = self.send(f'clear counters ports {port}')
             if re.search(r'[Ss]uccess', result):
-                result = 'Success'
+                return 'Success'
         else:
-            result = f'Model {self.model} not supported'
-        return result
+            return {'error': f'Model {self.model} not supported',
+                    'status_code': 422}
+
+    def get_port_counters(self, port: int):
+        """Get port counters: errors and traffic in bytes"""
+        if re.search('DES|DGS', self.model):
+            # packets
+            raw = self.send(f'show packet ports {port}')
+            rgx = (r'RX Bytes\s+(?P<rx_total>\d+)\s+(?P<rx_speed>\d+)(?s:.*)'
+                   r'TX Bytes\s+(?P<tx_total>\d+)\s+(?P<tx_speed>\d+)')
+
+            res = re.search(rgx, raw).groupdict()
+            res = dict(zip(res.keys(), map(int, res.values())))
+            # errors
+            raw = self.send(f'show error ports {port}')
+            raw = raw.replace(' - ', ' 0 ')
+            rgx = r'(\w[\w ]*?\w) +(\d+)(?: +(\w[\w ]*\w) +(\d+))?'
+            res['rx_errors'] = []
+            res['tx_errors'] = []
+            for r in re.finditer(rgx, raw):
+                if r[2] and r[2] != '0':
+                    res['rx_errors'].append({'name': r[1], 'count': int(r[2])})
+                if r[4] and r[4] != '0':
+                    res['tx_errors'].append({'name': r[3], 'count': int(r[4])})
+            return res
+        else:
+            return {'error': f'Model {self.model} not supported',
+                    'status_code': 422}
 
 ########################################################################
 # common functions
