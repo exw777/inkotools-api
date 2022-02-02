@@ -177,10 +177,10 @@ class Switch:
         if not COMMON['no_snmp_mode']:
             if arpreq(self.ip) or ping(self.ip).is_alive:
                 return True
-        # third check is via tcp port 23 (telnet)
+        # third check is via tcp port 80 (web)
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(0.1)
-        res = s.connect_ex((str(self.ip), 23))
+        res = s.connect_ex((str(self.ip), 80))
         s.close()
         if res == 0:
             return True
