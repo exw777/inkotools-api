@@ -31,9 +31,9 @@ config access_profile profile_id 20 add access_id {{ port }} ip source_ip 0.0.0.
 config access_profile profile_id 10 del access_id {{ port }}
 config access_profile profile_id 20 del access_id {{ port }}
         {%- else -%}
-sh conf cur inc "port {{ port }} permit"
+sh conf cur inc "port {{ port }} "
         {%- endif -%}
     {%- else -%}
-sh conf cur inc "profile_id 10 "
+sh conf cur inc "profile_id "
     {%- endif -%}
 {%- endif -%}

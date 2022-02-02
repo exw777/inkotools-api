@@ -64,8 +64,20 @@ def fmt_result(data, meta=None):
     """Format value according to internal api standart"""
     if isinstance(data, str):
         return {"detail": data}
+    elif isinstance(data, dict) and 'error' in data.keys():
+        # parse error returned from function
+        detail = str(data['error'])
+        try:
+            status_code = int(data['status_code'])
+        except Exception:
+            status_code = 500
+
+        raise HTTPException(status_code=status_code, detail=detail)
+
+    # add additional info
     if meta is not None:
         return {"data": data, "meta": meta}
+
     return {"data": data}
 
 
@@ -212,8 +224,19 @@ def switch_get_port_summary(sw_ip: IPv4Address, port_id: int):
     return fmt_result(result)
 
 
+@app.get('/sw/{sw_ip}/ports/{port_id}/acl')
+def switch_get_port_acl(sw_ip: IPv4Address, port_id: int):
+    sw = get_sw_instance(sw_ip)
+    validate_port(sw, port_id)
+    result = sw.get_acl(port_id)
+    if result is None:
+        raise HTTPException(
+            status_code=500, detail=f'failed to get port vlan')
+    return fmt_result(result)
+
+
 @app.get('/sw/{sw_ip}/ports/{port_id}/vlan')
-def switch_get_port_vlans(sw_ip: IPv4Address, port_id: int):
+def switch_get_port_vlan(sw_ip: IPv4Address, port_id: int):
     sw = get_sw_instance(sw_ip)
     validate_port(sw, port_id)
     result = sw.get_vlan_port(port_id)

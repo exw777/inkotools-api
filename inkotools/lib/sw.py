@@ -556,9 +556,9 @@ class Switch:
             result = self.send(template='acl.j2', port=port)
         except Exception as e:
             self.log.error(f'get acl error: {e}')
-            return None
-        if not result:
-            return None
+            return {'error': e}
+        if result is None:
+            return {'error': 'Command execution failed'}
         if re.search('QSW', self.model):
             # q-tech
             regex = (r'Interface Ethernet1/(?P<port>\d{1,2})'
@@ -566,23 +566,44 @@ class Switch:
                      r'(?P<ip>\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3})')
         else:
             # d-link
-            regex = (r'access_id\s+(?P<id>\d+)\s+.+source_ip\s+'
-                     r'(?P<ip>\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3})\s*'
-                     r'(.+mask\s+(?P<mask>\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}))?'
-                     r'\s+port\s+(?P<port>\d{1,2})')
+            regex = (
+                r'profile_id\s+(?P<profile_id>\d+)\s.*'
+                r'access_id\s+(?P<access_id>\d+)\s+.*'
+                r'source_ip\s+(?P<ip>\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3})\s*'
+                r'(.+mask\s+(?P<mask>\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}))?'
+                r'\s+port\s+(?P<port>\d{1,2})\s+(?P<mode>\w+)'
+            )
         result = [m.groupdict() for m in re.finditer(regex, result)]
-        # check if there are non-standart mask in acl rules
         for i in result:
-            if 'mask' in i.keys() and i['mask'] \
-                    and i['mask'] != '255.255.255.255':
-                self.log.warning(f"port {i['port']} acl {i['ip']}"
-                                 f" has non-standard mask: {i['mask']}")
+            # set int data type for numbers
+            for k in ['profile_id', 'access_id', 'port']:
+                if k in i.keys():
+                    i[k] = int(i[k])
+            # set default mask
+            if 'mask' in i.keys() and i['mask'] is None:
+                if i['profile_id'] == 10:
+                    i['mask'] = '255.255.255.255'
+                elif i['profile_id'] == 20:
+                    i['mask'] = '0.0.0.0'
+
+            # TODO: returned data checking must be on frontend
+
+            # check if there are non-standart mask in acl rules
+            # check non-standard mask
+            # if ('mask' in i.keys() and (
+            #     i['mask'] != '255.255.255.255' and i['profile_id'] == 10
+            #     or i['mask'] != '0.0.0.0' and i['profile_id'] == 20
+            #   )
+            # ):
+            #     self.log.warning(f"port {i['port']} acl {i['ip']}"
+            #                      f" has non-standard mask: {i['mask']}")
         # check if there are several acl for one port
-        ports = list(map(lambda x: x['port'], result))
-        for p in set(ports):
-            cnt = ports.count(p)
-            if cnt > 1:
-                self.log.warning(f'port {p} has {cnt} acl rules')
+        # TODO: check only one profile_id
+        # ports = list(map(lambda x: x['port'], result))
+        # for p in set(ports):
+        #     cnt = ports.count(p)
+        #     if cnt > 1:
+        #         self.log.warning(f'port {p} has {cnt} acl rules')
         return result
 
     def add_acl(self, port, ip):
