@@ -261,3 +261,11 @@ def switch_clear_port_counters(sw_ip: IPv4Address, port_id: int):
     sw = get_sw_instance(sw_ip)
     validate_port(sw, port_id)
     return fmt_result(sw.clear_port_counters(port_id))
+
+
+@app.get('/sw/{sw_ip}/ports/{port_id}/mac')
+def switch_get_port_mac_table(sw_ip: IPv4Address, port_id: int):
+    sw = get_sw_instance(sw_ip)
+    validate_port(sw, port_id)
+    data = sw.get_mac_table(port=port_id)
+    return fmt_result(data, meta={"count": len(data)})

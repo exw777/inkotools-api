@@ -1121,7 +1121,7 @@ class Switch:
 
     def clear_port_counters(self, port: int):
         """Clear counters on port"""
-        if re.search('DES|DGS', self.model):
+        if re.search(r'DES|DGS', self.model):
             result = self.send(f'clear counters ports {port}')
             if re.search(r'[Ss]uccess', result):
                 return 'Success'
@@ -1131,14 +1131,13 @@ class Switch:
 
     def get_port_counters(self, port: int):
         """Get port counters: errors and traffic in bytes"""
-        if re.search('DES|DGS', self.model):
+        if re.search(r'DES|DGS', self.model):
             # packets
             raw = self.send(f'show packet ports {port}')
             rgx = (r'RX Bytes\s+(?P<rx_total>\d+)\s+(?P<rx_speed>\d+)(?s:.*)'
                    r'TX Bytes\s+(?P<tx_total>\d+)\s+(?P<tx_speed>\d+)')
 
-            res = re.search(rgx, raw).groupdict()
-            res = dict(zip(res.keys(), map(int, res.values())))
+            res = dict_fmt_int(re.search(rgx, raw).groupdict())
             # errors
             raw = self.send(f'show error ports {port}')
             raw = raw.replace(' - ', ' 0 ')
@@ -1155,6 +1154,40 @@ class Switch:
             return {'error': f'Model {self.model} not supported',
                     'status_code': 422}
 
+    def get_mac_table(self,
+                      port: int = None,
+                      vid: int = None,
+                      mac: str = None):
+        """Get port mac table"""
+        if re.search(r'DES|DGS', self.model):
+            cmd = 'show fdb'
+            if port is not None:
+                cmd += f' port {port}'
+            if vid is not None:
+                cmd += f' vlanid {vid}'
+            if mac is not None:
+                cmd += f' mac {mac}'
+            rgx = (r'(?P<vid>\d+) +\w+ +'
+                   r'(?P<mac>(?:\w\w-){5}\w\w) +'
+                   r'(?P<port>\d+)')
+        elif re.search(r'QSW|DXS-3600-32S|DXS-1210-12SC/A2', self.model):
+            iface = '1/' if re.search('QSW', self.model) else '1/0/'
+            cmd = 'show mac-address-table'
+            if port is not None:
+                cmd += f' interface ethernet {iface}{port}'
+            if vid is not None:
+                cmd += f' vlan {vid}'
+            if mac is not None:
+                cmd += f' address {mac}'
+            rgx = (r'(?P<vid>\d+) +'
+                   r'(?P<mac>(?:\w\w-){5}\w\w) +'
+                   fr'[\w ]+{iface}(?P<port>\d+)')
+        else:
+            return {'error': f'Model {self.model} not supported',
+                    'status_code': 422}
+        raw = self.send(cmd)
+        res = [dict_fmt_int(m.groupdict()) for m in re.finditer(rgx, raw)]
+        return res
 ########################################################################
 # common functions
 
@@ -1198,6 +1231,21 @@ def str_to_bool(s):
         return False
     else:
         return None
+
+
+def str_to_int(s: str):
+    """Convert str to int if possible"""
+    if isinstance(s, str):
+        try:
+            return int(s)
+        except Exception:
+            return s
+    return s
+
+
+def dict_fmt_int(d: dict):
+    """Convert all str values in dict to int if possible"""
+    return dict(zip(d.keys(), map(str_to_int, d.values())))
 
 
 async def batch_async(sw_list, func, external=False, max_workers=1024):
