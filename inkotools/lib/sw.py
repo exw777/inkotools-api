@@ -779,70 +779,69 @@ class Switch:
         Returns: dict:
 
             {'port': int,
-            'untagged': int,
+            'untagged': [int,...],
             'tagged': [int,...]}
 
-            False - on error with several untagged vlans
+            {'error': e} - on exception
             """
 
         # check port is valid
-        if port and not int(port) in (self.access_ports + self.transit_ports):
-            self.log.error(f'port {port} out of range')
-            return None
+        # if port and not int(port) in (self.access_ports + self.transit_ports):
+        #     self.log.error(f'port {port} out of range')
+        #     return None
 
         try:
-            result_raw = self.send(template='vlan_port.j2', port=port)
+            raw = self.send(template='vlan_port.j2', port=port)
         except Exception as e:
             self.log.error(f'get vlan port error: {e}')
-            return None
-        if not result_raw:
-            return None
+            return {'error': e}
         tagged = []
         untagged = []
         if re.search('QSW', self.model):
-            regex = (
+            rgx = (
                 r'Port VID :(?P<u>\d+)(?:\s+|$)'
                 r'(?:.*(?:Trunk|tag) allowed Vlan: (?P<t>[-;0-9]+))?'
             )
-            r = re.search(regex, result_raw)
+            r = re.search(rgx, raw)
             untagged.append(int(r.group('u')))
             if r.group('t'):
                 t = r.group('t').replace(';', ',')
                 tagged = interval_to_list(t)
         else:
-            regex = (
-                r'\s+(?P<vid>\d+)(?:\s+(?P<u>[-X])\s+(?P<t>[-X])).*'
-            )
-            for r in re.finditer(regex, result_raw):
+            rgx = r'\s+(?P<vid>\d+)(?:\s+(?P<u>[-X])\s+(?P<t>[-X])).*'
+            for r in re.finditer(rgx, raw):
                 if r.group('u') == 'X':
                     untagged.append(int(r.group('vid')))
                 if r.group('t') == 'X':
                     tagged.append(int(r.group('vid')))
+
+        # ALL OUTPUT CHECKS - ON FRONTEND
+        #
         # try to workaround common situation:
         # double vlan on access port and one of them is default (vid 1)
-        if (
-            len(untagged) == 2
-            and 1 in untagged
-            and port in self.access_ports
-        ):
-            tmp = set(untagged)
-            tmp.remove(1)
-            untagged = list(tmp)
-            self.log.warning(
-                f'Check configuration! Ignoring vid 1 '
-                f'with double untagged vlan on access port {port}'
-            )
-        # check for several untagged vlans and raise error
-        if len(untagged) > 1:
-            self.log.error(
-                f'several untagged vlans on one port! '
-                f'port {port}, vlans: {untagged}'
-            )
-            return False
-        elif untagged:
-            untagged = int(untagged[0])
-        else:
-            untagged = None
+        # if (
+        #     len(untagged) == 2
+        #     and 1 in untagged
+        #     and port in self.access_ports
+        # ):
+        #     tmp = set(untagged)
+        #     tmp.remove(1)
+        #     untagged = list(tmp)
+        #     self.log.warning(
+        #         f'Check configuration! Ignoring vid 1 '
+        #         f'with double untagged vlan on access port {port}'
+        #     )
+        # # check for several untagged vlans and raise error
+        # if len(untagged) > 1:
+        #     self.log.error(
+        #         f'several untagged vlans on one port! '
+        #         f'port {port}, vlans: {untagged}'
+        #     )
+        #     return False
+        # elif untagged:
+        #     untagged = int(untagged[0])
+        # else:
+        #     untagged = None
 
         return {'port': port, 'untagged': untagged, 'tagged': tagged}
 
@@ -897,7 +896,7 @@ class Switch:
                     return False
         # check if vlan already added
         if (
-            (vid == cur_vlans['untagged'] and not tag)
+            (vid in cur_vlans['untagged'] and not tag)
             or (vid in cur_vlans['tagged'] and tag)
         ):
             self.log.info(
@@ -916,9 +915,9 @@ class Switch:
                 'wanted. Use `unsafe=True` parameter to skip this check.')
             return False
         # check overlapping untagged ports
-        if not tag and cur_vlans['untagged']:
+        if not tag and len(cur_vlans['untagged']) > 0:
             # q-tech workaround (vid 1 when no access vlan on port)
-            if re.search('QSW', self.model) and cur_vlans['untagged'] == 1:
+            if re.search('QSW', self.model) and cur_vlans['untagged'][0] == 1:
                 pass
             elif not force_replace:
                 self.log.error(
@@ -929,7 +928,7 @@ class Switch:
             else:
                 # if force - delete old vlan before adding new
                 if not self.delete_vlan_port(
-                        port=port, vid=cur_vlans['untagged']):
+                        port=port, vid=cur_vlans['untagged'][0]):
                     self.log.error(
                         f'failed to replace vlan {vid} on port {port}')
                     return False
@@ -966,7 +965,7 @@ class Switch:
             self.log.error(f'failed to get vlans from port {port}')
             return False
         # check if vlan already deleted
-        if not (vid == cur_vlans['untagged'] or vid in cur_vlans['tagged']):
+        if not (vid in cur_vlans['untagged'] or vid in cur_vlans['tagged']):
             self.log.info(
                 f'vlan {vid} not set on port {port}. Skipping.')
             return True
@@ -1019,7 +1018,7 @@ class Switch:
             # vlan processing
             for vid in vid_list:
                 vid = int(vid)
-                if vid == cur_vlans['untagged'] and not force_untagged:
+                if vid in cur_vlans['untagged'] and not force_untagged:
                     self.log.warning(
                         f'vlan {vid} already set untagged on port {port}. '
                         'Skipping. Use `force_untagged=True` to replace.')

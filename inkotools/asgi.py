@@ -228,25 +228,14 @@ def switch_get_port_summary(sw_ip: IPv4Address, port_id: int):
 def switch_get_port_acl(sw_ip: IPv4Address, port_id: int):
     sw = get_sw_instance(sw_ip)
     validate_port(sw, port_id)
-    result = sw.get_acl(port_id)
-    if result is None:
-        raise HTTPException(
-            status_code=500, detail=f'failed to get port vlan')
-    return fmt_result(result)
+    return fmt_result(sw.get_acl(port_id))
 
 
 @app.get('/sw/{sw_ip}/ports/{port_id}/vlan')
 def switch_get_port_vlan(sw_ip: IPv4Address, port_id: int):
     sw = get_sw_instance(sw_ip)
     validate_port(sw, port_id)
-    result = sw.get_vlan_port(port_id)
-    if result is None:
-        raise HTTPException(
-            status_code=500, detail=f'failed to get port vlan')
-    elif result == False:
-        raise HTTPException(
-            status_code=409, detail=f'probably untagged ports overlapping')
-    return fmt_result(result)
+    return fmt_result(sw.get_vlan_port(port_id))
 
 
 @app.get('/sw/{sw_ip}/ports/{port_id}/counters')
