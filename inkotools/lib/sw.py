@@ -177,15 +177,17 @@ class Switch:
         if not COMMON['no_snmp_mode']:
             if arpreq(self.ip) or ping(self.ip).is_alive:
                 return True
-        # third check is via tcp port 80 (web)
+        # third check is via tcp port 80 (web) and 23 (telnet)
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(0.1)
-        res = s.connect_ex((str(self.ip), 80))
-        s.close()
-        if res == 0:
+        if s.connect_ex((str(self.ip), 80)) == 0:
+            s.close()
             return True
-        else:
-            return False
+        if s.connect_ex((str(self.ip), 23)) == 0:
+            s.close()
+            return True
+        s.close()
+        return False
 
     def get_oid(self, oid):
         """Get snmp oid from switch"""
