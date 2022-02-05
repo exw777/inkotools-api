@@ -40,7 +40,7 @@ def get_sw_instance(sw_ip):
             if not sw.is_alive():
                 raise Switch.UnavailableError()
         else:
-            if COMMON['no_snmp_mode']:
+            if COMMON['tcp_only_mode']:
                 data = db.get(sw_ip)
             else:
                 data = None

@@ -1,8 +1,20 @@
 ---
+# database file name without extension
 DB_FILE: switches
 
-no_snmp_mode: false
+# relative path on tftp server for backups
+backup_dir: ''
+# host ip (last octet) of tftp server for backups
+backup_host: 250
+# absolute path to backup directory with git repo
+backup_path: ''
+# git author for auto backup commits
+git_author: Backup routine script <robot@inko.tools>
 
+# disable icmp and snmp to use with proxychains
+tcp_only_mode: false
+
+# net ranges to scan for new swithces
 NETS:
   - start: '192.168.57.1'
     end: '192.168.57.249'
@@ -17,6 +29,7 @@ NETS:
   - start: '192.168.49.2'
     end: '192.168.49.249'
 
+# model colors for cli interact formatting
 MODEL_COLORS:
   DXS-3600-32S:
     Fore: RED

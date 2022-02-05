@@ -24,8 +24,8 @@ from .cfg import ROOT_DIR, COMMON, SECRETS
 log = logging.getLogger(__name__)
 
 # dynamic imports for normal mode
-if COMMON['no_snmp_mode']:
-    log.debug('Working in no-snmp mode')
+if COMMON['tcp_only_mode']:
+    log.debug('Working in tcp-only mode')
 else:
     from arpreq import arpreq
     from easysnmp import snmp_get
@@ -70,7 +70,7 @@ class Switch:
             raise self.UnavailableError(
                 f'Host {str(self.ip)} is not available!')
 
-        if COMMON['no_snmp_mode'] and offline_data is None:
+        if COMMON['tcp_only_mode'] and offline_data is None:
             # TODO: get this values via telnet
             raise self.UnavailableError(
                 f'{str(self.ip)} empty data in no-snmp mode')
@@ -174,7 +174,7 @@ class Switch:
         there is a corresponding entry in the local arp table
         first two check are skipping in no-snmp mode
         """
-        if not COMMON['no_snmp_mode']:
+        if not COMMON['tcp_only_mode']:
             if arpreq(self.ip) or ping(self.ip).is_alive:
                 return True
         # third check is via tcp port 80 (web) and 23 (telnet)
@@ -191,8 +191,8 @@ class Switch:
 
     def get_oid(self, oid):
         """Get snmp oid from switch"""
-        if COMMON['no_snmp_mode']:
-            self.error('Calling snmp in no-snmp mode')
+        if COMMON['tcp_only_mode']:
+            self.error('Calling snmp in tcp-only mode')
             return None
         return snmp_get(oid, hostname=str(self.ip),
                         version=2, timeout=3).value

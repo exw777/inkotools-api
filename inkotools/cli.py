@@ -134,7 +134,7 @@ def main():
     if ARGS.module == 'sw':
         ip = full_ip(ARGS.ip)
         data = None
-        if COMMON['no_snmp_mode']:
+        if COMMON['tcp_only_mode']:
             # get local data
             data = db.get(ip)
             if data is None:
