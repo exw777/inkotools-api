@@ -18,7 +18,7 @@ from jinja2 import Environment as j2env
 from jinja2 import FileSystemLoader as j2loader
 
 # local imports
-from .cfg import ROOT_DIR, COMMON, SECRETS
+from .cfg import ROOT_DIR, COMMON, SECRETS, NETS
 
 # module logger
 log = logging.getLogger(__name__)
@@ -51,7 +51,7 @@ class Switch:
         UnavailableError: Raises on init if the switch is unavailable.
     """
 
-    def __init__(self, ip, offline_data=None):
+    def __init__(self, ip, model=None, location=None, mac=None):
         """Init of switch class
 
         Arguments:
@@ -70,17 +70,40 @@ class Switch:
             raise self.UnavailableError(
                 f'Host {str(self.ip)} is not available!')
 
-        if COMMON['tcp_only_mode'] and offline_data is None:
-            # TODO: get this values via telnet
-            raise self.UnavailableError(
-                f'{str(self.ip)} empty data in no-snmp mode')
+        # tcp only mode for proxychains use
+        if COMMON['tcp_only_mode']:
+            # first try to get data provided via class constructor
+            self.model = model
+            self.location = location
+            self.mac = mac
 
-        # none-snmp mode for using with proxychains
-        if offline_data:
-            self.log.debug(f'Got data: {offline_data}')
-            self.mac = offline_data['mac']
-            self.model = offline_data['model']
-            self.location = offline_data['location']
+            # set model via telnet
+            if self.model is None:
+                self._setup_telnet_model()
+
+            # get mac and location via telnet
+            if self.location is None or self.mac is None:
+                if re.search(r'DES|DGS|DXS-1210-12SC', self.model):
+                    raw = self.send('sh sw')
+                elif re.search(r'DXS', self.model):
+                    raw = self.send(['sh mac-address-table static vlan 1',
+                                     'sh snmp-server'])
+                elif re.search(r'QSW', self.model):
+                    raw = self.send(['sh mac-address-table static vlan 1',
+                                     'sh snmp status'])
+                elif re.search(r'LTP', self.model):
+                    raw = self.send(['show system environment',
+                                     'show ip snmp'])
+                elif self.model == 'GEPON':
+                    raw = self.send('show system infor')
+
+                rgx_mac = r'(?P<mac>(?:\w\w[-:]){5}\w\w)'
+                rgx_loc = r'Location *: *\'?(?P<loc>.*\w)?'
+
+                self.location = re.search(rgx_loc, raw).group('loc')
+                self.mac = netaddr.EUI(re.search(rgx_mac, raw).group('mac'))
+
+        # normal mode
         else:
             # set model
             self.model = re.search(r'[A-Z]{1,3}-?[0-9]{1,4}[^ ]*|GEPON',
@@ -148,7 +171,19 @@ class Switch:
             else:
                 self.transit_ports = list(range(1, max_ports + 1))
 
-        self.log.debug(f'switch object created')
+        # for l3 switches set self ip from managment vlan
+        if self.ip not in NETS:
+            if re.search('DXS', self.model):
+                raw = self.send('sh ip interface vlan 1')
+                rgx = r'(?P<ip>(?:\d+\.){3}\d+)'
+            elif re.search('DGS', self.model):
+                raw = self.send('sh sw')
+                rgx = r'IP Address +: (?P<ip>(?:\d+\.){3}\d+)'
+            self.ip = netaddr.IPAddress(re.search(rgx, raw).group('ip'))
+            self.log = logging.getLogger(str(self.ip))
+
+        self.log.debug(f'switch object created: [{self.ip}] '
+                       f'[{self.mac}] [{self.model}] [{self.location}]')
 
     class UnavailableError(Exception):
         """Custom exception when switch is not available"""
@@ -178,15 +213,13 @@ class Switch:
             if arpreq(self.ip) or ping(self.ip).is_alive:
                 return True
         # third check is via tcp port 80 (web) and 23 (telnet)
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(0.1)
-        if s.connect_ex((str(self.ip), 80)) == 0:
+        for p in [80, 23]:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(0.5)
+            if s.connect_ex((str(self.ip), p)) == 0:
+                s.close()
+                return True
             s.close()
-            return True
-        if s.connect_ex((str(self.ip), 23)) == 0:
-            s.close()
-            return True
-        s.close()
         return False
 
     def get_oid(self, oid):
@@ -196,6 +229,34 @@ class Switch:
             return None
         return snmp_get(oid, hostname=str(self.ip),
                         version=2, timeout=3).value
+
+    def _setup_telnet_model(self):
+        """Get model via telnet"""
+        tn = pexpect.spawn(f'telnet {self.ip}', timeout=3, encoding="utf-8")
+        matches = {
+            'DXS-1210-12SC/A1': 'DXS-1210-12SC Switch',
+            're':               r'[A-Z]{1,3}-?[0-9]{1,4}[^ ]*',
+            'GEPON':            'EPON System',
+            'S5328C-EI-24S':    'Login authentication',
+            'QSW-2800-28T-AC':  'in:',
+            'unknown':          pexpect.TIMEOUT}
+        m = tn.expect(list(matches.values()))
+        if m == 1:
+            model = tn.after
+            if model == 'DXS-1210-12SC':
+                model += '/A2'
+            elif model == 'DGS-1210-28X/ME':
+                model += '/B1'
+        else:
+            model = list(matches.keys())[m]
+        tn.close()
+        self.model = model
+        # set additional hardware revision for 3200
+        if re.search('DES-3200', self.model):
+            raw = self.send('sh sw')
+            if re.search(r'Hardware Version +: C1', raw):
+                self.model += '/C1'
+        self.log.debug(f'model: {self.model}')
 
     def _telnet(self):
         """Connect via telnet and keep connection in returned object"""
@@ -506,7 +567,7 @@ class Switch:
                     res['port'] = int(res['port'])
 
         except Exception as e:
-            log.error(f'port {port} - regex parse failed: {e}')
+            self.log.error(f'port {port} - regex parse failed: {e}')
             return raw
         else:
             return result

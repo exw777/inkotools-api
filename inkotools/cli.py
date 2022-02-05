@@ -137,19 +137,22 @@ def main():
         if COMMON['tcp_only_mode']:
             # get local data
             data = db.get(ip)
-            if data is None:
-                log.fatal('Failed to get data from local database')
-                exit(1)
         try:
             global sw
-            sw = Switch(ip, offline_data=data)
-        except Switch.UnavailableError as e:
-            exit(e)
-        try:
+            if data is not None:
+                sw = Switch(**data)
+            else:
+                sw = Switch(ip)
+                if COMMON['tcp_only_mode']:
+                    db.add(sw)
+
             if ARGS.interact:
                 sw_interact(sw)
             else:
                 serve_module('sw')
+
+        except Switch.UnavailableError as e:
+            exit(e)
         except Switch.CredentialsError as e:
             log.error(e)
             exit('Run cfg --setup')

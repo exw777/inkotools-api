@@ -40,13 +40,18 @@ def get_sw_instance(sw_ip):
             if not sw.is_alive():
                 raise Switch.UnavailableError()
         else:
+            log.debug(f'creating new switch {sw_ip}')
             if COMMON['tcp_only_mode']:
                 data = db.get(sw_ip)
             else:
                 data = None
-            log.debug(f'creating new switch {sw_ip}')
-            sw = Switch(sw_ip, offline_data=data)
-            SWITCHES[sw_ip] = sw
+
+            if data is not None:
+                sw = Switch(**data)
+            else:
+                sw = Switch(sw_ip)
+
+            SWITCHES[str(sw.ip)] = sw
 
     except Switch.UnavailableError as e:
         log.warning(e)
@@ -192,6 +197,12 @@ def switch_backup(sw_ip: IPv4Address):
         raise HTTPException(
             status_code=500, detail=f'failed to backup {sw_ip}')
     return fmt_result(result)
+
+
+@app.get('/sw/{sw_ip}/vlans/')
+def switch_get_vlans_list(sw_ip: IPv4Address):
+    sw = get_sw_instance(sw_ip)
+    return fmt_result(sw.get_vlan_list())
 
 
 @app.get('/sw/{sw_ip}/ports/')
