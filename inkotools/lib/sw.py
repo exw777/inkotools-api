@@ -372,21 +372,17 @@ class Switch:
         self._close_telnet()
         self.log.debug(f'switch object destroyed')
 
-    def backup(self, **kwargs):
+    def backup(self):
         """Backup via tftp
-
-        Optional arguments:
-
-            server: Default is 250 host of switch subnet.
-
-            path:   Default is 'backup'.
 
         Returns: True if file transfer is successful,
                  raw result otherwise.
         """
+        server = f"192.168.{self.ip.words[2]}.{COMMON['backup_host']}"
+        path = COMMON['backup_dir']
         start = time()
         try:
-            result = self.send(template='backup.j2', **kwargs)
+            result = self.send(template='backup.j2', server=server, path=path)
         except Exception as e:
             self.log.error(f'backup error: {e}')
             return None
