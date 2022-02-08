@@ -4,7 +4,7 @@
 # internal imports
 import logging
 import re
-from ipaddress import IPv4Address, IPv4Interface
+from ipaddress import IPv4Address
 from typing import Optional
 
 # external imports
@@ -16,7 +16,7 @@ from pydantic import BaseModel, ValidationError, validator
 # local imports
 from lib.cfg import COMMON
 from lib.db import DB
-from lib.sw import Switch
+from lib.sw import Switch, ipcalc
 
 # module logger
 log = logging.getLogger(__name__)
@@ -103,26 +103,26 @@ def validate_port(sw: Switch, port_id: int):
 async def validation_exception_handler(request, exc):
     """Override validation errors formatting"""
     detail = ', '.join(
-        map(lambda err: str(err["loc"])+' - ' + err["msg"], exc.errors()))
+        map(lambda err: err["loc"][-1]+' - ' + err["msg"], exc.errors()))
     return JSONResponse({"detail": detail}, status_code=422)
 
 
 class ArpSearchModel(BaseModel):
-    ip: Optional[IPv4Interface] = None
+    ip: Optional[IPv4Address] = None
     vid: Optional[int] = None
     mac: Optional[str] = None
 
     @validator('ip')
     def ip_range(cls, v):
-        if int(str(v.ip).split('.')[2]) in [57, 58, 59, 60, 47, 49]:
-            raise ValueError(f'{v.ip} is from switches subnet')
+        if int(str(v).split('.')[2]) in [57, 58, 59, 60, 47, 49, 123]:
+            raise ValueError(f'{v} is not from clients subnet')
         return v
 
     @validator('vid')
     def vid_range(cls, v):
         if (not (v in range(255) or v in [1148, 1150, 1151, 1152])
-                or v in [57, 58, 59, 60, 47, 49]):
-            raise ValueError(f'vid {vid} is not valid for client subnet')
+                or v in [57, 58, 59, 60, 47, 49, 123]):
+            raise ValueError(f'{v} is not valid for client subnet')
         return v
 
     @validator('mac')
@@ -147,16 +147,8 @@ def arp_search(req: ArpSearchModel):
     gw = None
     ip = None
     if req.ip is not None:
-        ip = req.ip.ip
-        if ip.is_private:
-            gw = list(IPv4Interface(f'{ip}/24').network.hosts())[0]
-        elif ip.is_global:
-            if req.ip.network.prefixlen == 32:
-                raise HTTPException(
-                    status_code=422,
-                    detail='Public IP must have prefix to determine gateway')
-            gw = list(req.ip.network.hosts())[0]
-
+        ip = str(req.ip)
+        gw = ipcalc(req.ip)['gateway']
     elif req.vid is not None:
         if req.vid in [1148, 1150, 1151, 1152]:
             HTTPException(
@@ -168,8 +160,6 @@ def arp_search(req: ArpSearchModel):
         raise HTTPException(
             status_code=500, detail='Failed to determine gateway')
     sw = get_sw_instance(gw)
-    if ip is not None:
-        ip = str(ip)
     data = sw.get_arp_table(ip=ip, vid=req.vid, mac=req.mac)
     return fmt_result(data, meta={"entries": len(data)})
 
@@ -219,6 +209,11 @@ def database_add_switch(sw_ip: IPv4Address):
     else:
         raise HTTPException(
             status_code=500, detail=f'failed to add {sw_ip}')
+
+
+@app.get('/ipcalc/{ip}/')
+def get_ipcalc_summary(ip: IPv4Address):
+    return fmt_result(ipcalc(ip))
 
 
 @app.get('/sw/{sw_ip}/')
