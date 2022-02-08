@@ -213,7 +213,11 @@ def database_add_switch(sw_ip: IPv4Address):
 
 @app.get('/ipcalc/{ip}/')
 def get_ipcalc_summary(ip: IPv4Address):
-    return fmt_result(ipcalc(ip))
+    data = ipcalc(ip)
+    if data['prefix'] == 32:
+        raise HTTPException(
+            status_code=404, detail=f'{ip} not found in client subnets')
+    return fmt_result(data)
 
 
 @app.get('/sw/{sw_ip}/')
