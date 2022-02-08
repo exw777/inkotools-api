@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ValidationError, validator
 
 # local imports
-from lib.cfg import COMMON
+from lib.cfg import COMMON, NETS
 from lib.db import DB
 from lib.sw import Switch, ipcalc
 
@@ -44,7 +44,11 @@ def get_sw_instance(sw_ip):
         else:
             log.debug(f'creating new switch {sw_ip}')
             if COMMON['tcp_only_mode']:
-                data = db.get(sw_ip)
+                if sw_ip in NETS:
+                    data = db.get(sw_ip)
+                else:
+                    # workaround not to get model via telnet on arp requests
+                    data = {"ip": sw_ip, "model": "DXS-3600-32S"}
             else:
                 data = None
 
