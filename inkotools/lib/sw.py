@@ -18,7 +18,7 @@ from jinja2 import Environment as j2env
 from jinja2 import FileSystemLoader as j2loader
 
 # local imports
-from .cfg import ROOT_DIR, COMMON, SECRETS, NETS
+from .cfg import ROOT_DIR, COMMON, SECRETS, NETS, PIP_NETS
 
 # module logger
 log = logging.getLogger(__name__)
@@ -1349,6 +1349,24 @@ def str_to_int(s: str):
 def dict_fmt_int(d: dict):
     """Convert all str values in dict to int if possible"""
     return dict(zip(d.keys(), map(str_to_int, d.values())))
+
+
+def ipcalc(ip: str):
+    """Return base info about ip address"""
+    ip = netaddr.IPNetwork(str(ip))
+    if ip.is_private():
+        ip.prefixlen = 24
+    else:
+        for net in PIP_NETS:
+            if ip in net:
+                ip.prefixlen = net.prefixlen
+    data = {
+        'ip': str(ip.ip),
+        'mask': str(ip.netmask),
+        'gateway': str(next(ip.iter_hosts())),
+        'prefix': ip.prefixlen,
+    }
+    return data
 
 
 async def batch_async(sw_list, func, external=False, max_workers=1024):

@@ -91,3 +91,6 @@ COMMON = load_cfg('common')
 NETS = netaddr.IPSet()
 for net in COMMON['NETS']:
     NETS.add(netaddr.IPRange(net['start'], net['end']))
+
+# PIP networks
+PIP_NETS = list(map(netaddr.IPNetwork, COMMON['PIP_NETS']))
