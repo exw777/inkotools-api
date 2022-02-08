@@ -250,6 +250,8 @@ class Switch:
         else:
             model = list(matches.keys())[m]
         tn.close()
+        if model == 'unknown':
+            raise RuntimeError('Failed to parse switch model!')
         self.model = model
         # set additional hardware revision for 3200
         if re.search('DES-3200', self.model):
@@ -1246,6 +1248,49 @@ class Switch:
         raw = self.send(cmd)
         res = [dict_fmt_int(m.groupdict()) for m in re.finditer(rgx, raw)]
         return res
+
+    def get_arp_table(self,
+                      ip: str = None,
+                      mac: str = None,
+                      vid: int = None):
+        """Get arp table on l3 switches"""
+        log.debug(f'Got data: ip={ip}, mac={mac}, vid={vid}')
+        if ip is None and mac is None and vid is None:
+            return []
+
+        if not re.search(r'DXS-3600|DGS-3627G', self.model):
+            return {'error': f'Model {self.model} not supported',
+                    'status_code': 422}
+
+        if self.model == 'DXS-3600-32S':
+            cmd = 'sh arp '
+            if ip is not None:
+                cmd += ip
+            elif mac is not None:
+                cmd += mac
+            elif vid is not None:
+                cmd += f'int vlan {vid}'
+            rgx = (r'(?P<ip>(?:\d+\.){3}\d+) +'
+                   r'(?P<mac>(?:\w\w-){5}\w\w) +'
+                   r'vlan(?P<vid>\d+)')
+
+        elif self.model == 'DGS-3627G':
+            cmd = 'sh arpen '
+            if ip is not None:
+                cmd += f'ipa {ip}'
+            elif mac is not None:
+                cmd += f'mac {mac}'
+            elif vid is not None:
+                cmd += f'ipif {vid}'
+            rgx = (r'(?P<vid>\w+) +'
+                   r'(?P<ip>(?:\d+\.){3}\d+) +'
+                   r'(?P<mac>(?!(?:FF-){5}FF)(?:\w\w-){5}\w\w) +')
+
+        raw = self.send(cmd)
+        res = [dict_fmt_int(m.groupdict()) for m in re.finditer(rgx, raw)]
+        return res
+
+
 ########################################################################
 # common functions
 

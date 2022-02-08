@@ -3,13 +3,15 @@
 
 # internal imports
 import logging
-from ipaddress import IPv4Address
+import re
+from ipaddress import IPv4Address, IPv4Interface
+from typing import Optional
 
 # external imports
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError, validator
 
 # local imports
 from lib.cfg import COMMON
@@ -101,8 +103,75 @@ def validate_port(sw: Switch, port_id: int):
 async def validation_exception_handler(request, exc):
     """Override validation errors formatting"""
     detail = ', '.join(
-        map(lambda err: err["loc"][1]+' - ' + err["msg"], exc.errors()))
+        map(lambda err: str(err["loc"])+' - ' + err["msg"], exc.errors()))
     return JSONResponse({"detail": detail}, status_code=422)
+
+
+class ArpSearchModel(BaseModel):
+    ip: Optional[IPv4Interface] = None
+    vid: Optional[int] = None
+    mac: Optional[str] = None
+
+    @validator('ip')
+    def ip_range(cls, v):
+        if int(str(v.ip).split('.')[2]) in [57, 58, 59, 60, 47, 49]:
+            raise ValueError(f'{v.ip} is from switches subnet')
+        return v
+
+    @validator('vid')
+    def vid_range(cls, v):
+        if (not (v in range(255) or v in [1148, 1150, 1151, 1152])
+                or v in [57, 58, 59, 60, 47, 49]):
+            raise ValueError(f'vid {vid} is not valid for client subnet')
+        return v
+
+    @validator('mac')
+    def mac_valid(cls, v):
+        if not re.match(r'^([a-fA-F0-9]{2}[:-]?){5}[a-fA-F0-9]{2}$', v):
+            raise ValueError('must be valid MAC address')
+        return v
+
+    @validator('mac')
+    def vid_required(cls, v, values):
+        if values['vid'] is None:
+            raise ValueError('VID is required for MAC search')
+        return v
+
+
+@app.post('/arpsearch')
+def arp_search(req: ArpSearchModel):
+    if req.ip is None and req.mac is None and req.vid is None:
+        raise HTTPException(status_code=422,
+                            detail=('At least one of the following values '
+                                    'must be provided: ip, mac, vid'))
+    gw = None
+    ip = None
+    if req.ip is not None:
+        ip = req.ip.ip
+        if ip.is_private:
+            gw = list(IPv4Interface(f'{ip}/24').network.hosts())[0]
+        elif ip.is_global:
+            if req.ip.network.prefixlen == 32:
+                raise HTTPException(
+                    status_code=422,
+                    detail='Public IP must have prefix to determine gateway')
+            gw = list(req.ip.network.hosts())[0]
+
+    elif req.vid is not None:
+        if req.vid in [1148, 1150, 1151, 1152]:
+            HTTPException(
+                satus_code=409,
+                detail=f'Search MAC for VID {req.vid} not implemented yet')
+        gw = f'192.168.{str(req.vid)}.1'
+
+    if gw is None:
+        raise HTTPException(
+            status_code=500, detail='Failed to determine gateway')
+    sw = get_sw_instance(gw)
+    if ip is not None:
+        ip = str(ip)
+    data = sw.get_arp_table(ip=ip, vid=req.vid, mac=req.mac)
+    return fmt_result(data, meta={"entries": len(data)})
 
 
 class SearchModel(BaseModel):
@@ -112,7 +181,7 @@ class SearchModel(BaseModel):
 @app.post('/db/search')
 def database_search(search: SearchModel):
     data = db.search(search.keyword)
-    return fmt_result(data, meta={"count": len(data)})
+    return fmt_result(data, meta={"entries": len(data)})
 
 
 @app.get('/db/sw/{sw_ip}/')
@@ -268,4 +337,4 @@ def switch_get_port_mac_table(sw_ip: IPv4Address, port_id: int):
     sw = get_sw_instance(sw_ip)
     validate_port(sw, port_id)
     data = sw.get_mac_table(port=port_id)
-    return fmt_result(data, meta={"count": len(data)})
+    return fmt_result(data, meta={"entries": len(data)})
