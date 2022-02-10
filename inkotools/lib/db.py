@@ -36,10 +36,18 @@ class DB:
     # some multiline sql queries used in class
 
     SCHEMA = '''CREATE TABLE IF NOT EXISTS switches (
-            ip integer PRIMARY KEY,
-            mac text NOT NULL UNIQUE,
-            model text NOT NULL,
-            location text NOT NULL)'''
+                    ip integer PRIMARY KEY,
+                    mac text NOT NULL UNIQUE,
+                    model text NOT NULL,
+                    location text NOT NULL);
+
+                CREATE TABLE IF NOT EXISTS aliases (
+                    alias integer PRIMARY KEY,
+                    vid integer NOT NULL,
+                    ip integer NOT NULL,
+                    FOREIGN KEY (ip) REFERENCES switches(ip)
+                        ON DELETE CASCADE ON UPDATE CASCADE);
+            '''
 
     UPSERT = '''INSERT INTO switches (ip, mac, model, location)
                 VALUES ({ip},'{mac}','{model}','{location}')
@@ -52,6 +60,17 @@ class DB:
                     switches.mac != excluded.mac OR
                     switches.model != excluded.model OR
                     switches.location != excluded.location;'''
+
+    UPSERT_ALIAS = '''INSERT INTO aliases (alias, vid, ip)
+                    VALUES ({alias},{vid},{ip})
+                    ON CONFLICT(alias) DO
+                    UPDATE SET
+                        vid=excluded.vid,
+                        ip=excluded.ip
+                    WHERE
+                        aliases.vid != excluded.vid OR
+                        aliases.ip != excluded.ip;
+                    '''
 
     SEARCH = '''SELECT * from switches
                 WHERE model LIKE '%{word}%'
@@ -70,7 +89,8 @@ class DB:
         # exec initial sql if database file not exists
         if not self.db_file.exists():
             log.warning('No db file found, creating new...')
-            if self._exec(self.SCHEMA) is not None:
+            self._open()
+            if self._cursor.executescript(self.SCHEMA) is not None:
                 self._connection.commit()
                 log.info('New database created')
 
@@ -85,6 +105,8 @@ class DB:
                 self.db_file, check_same_thread=False)
             # use output in sqlite3.Row instead of tuple
             self._connection.row_factory = sqlite3.Row
+            # enable foreign keys
+            self._connection.execute("PRAGMA foreign_keys = 1")
             self._cursor = self._connection.cursor()
         except Exception as e:
             log.error(e)
@@ -113,13 +135,6 @@ class DB:
             return None
         else:
             return result
-
-    def _row_format(self, row):
-        """Format sqlite row output to dict"""
-        row = dict(row)
-        row['ip'] = str(netaddr.IPAddress(row['ip']))
-        row['mac'] = str(netaddr.EUI(row['mac']))
-        return row
 
     def add(self, sw):
         """Add new switch or update changes
@@ -163,7 +178,7 @@ class DB:
         for sw in sw_list:
             cnt += self.add(sw)
         log.info(f'Added {cnt} items')
-        return(cnt)
+        return cnt
 
     def get(self, sw_ip):
         """Get switch entry
@@ -174,7 +189,7 @@ class DB:
             ip=int(netaddr.IPAddress(str(sw_ip))))
         result = self._exec(query).fetchone()
         if result is not None:
-            return self._row_format(result)
+            return sw_row_format(result)
         else:
             log.debug(f'{sw_ip} not found')
             return None
@@ -223,13 +238,10 @@ class DB:
 
         Returns: list of dicts of strings (ip, mac, model, location)
         """
-        result = []
         # for mac search without '-' and ':'
         query = self.SEARCH.format(
             word=word, mac=word.replace(':', '').replace('-', ''))
-        for row in self._exec(query):
-            result.append(self._row_format(row))
-        return result
+        return [sw_row_format(row) for row in self._exec(query)]
 
     def ip_list(self):
         """Get list of all ip addresses"""
@@ -238,3 +250,57 @@ class DB:
         for row in self._exec(query):
             result.append(str(netaddr.IPAddress(row['ip'])))
         return result
+
+    def add_aliases(self, sw_ip, aliases):
+        """Add list of aliases to database"""
+        cnt = 0
+        for item in aliases:
+            query = self.UPSERT_ALIAS.format(
+                alias=int(netaddr.IPAddress(str(item['alias']))),
+                vid=item['vid'],
+                ip=int(netaddr.IPAddress(str(sw_ip)))
+            )
+            res = self._exec(query)
+            if res is not None:
+                if res.rowcount == 0:
+                    log.debug(f"{item['alias']} already exists")
+                else:
+                    self._connection.commit()
+                    log.info(f"{item['alias']} added to database")
+                    cnt += res.rowcount
+            else:
+                log.error(f"{item['alias']} failed")
+        return cnt
+
+    def get_aliases(self, alias: str = None, vid: int = None, ip: str = None):
+        """Search in aliases"""
+        query = 'SELECT * from aliases'
+        if alias is not None or vid is not None or ip is not None:
+            query += ' WHERE'
+            if alias is not None:
+                query += " alias = '{alias}'".format(
+                    alias=int(netaddr.IPAddress(str(alias))))
+            if vid is not None:
+                query += " vid = '{vid}'".format(vid=vid)
+            if ip is not None:
+                query += " ip = '{ip}'".format(
+                    ip=int(netaddr.IPAddress(str(ip))))
+        query += ';'
+
+        return [alias_row_format(row) for row in self._exec(query)]
+
+
+def sw_row_format(row):
+    """Format sqlite switch row output to dict"""
+    row = dict(row)
+    row['ip'] = str(netaddr.IPAddress(row['ip']))
+    row['mac'] = str(netaddr.EUI(row['mac']))
+    return row
+
+
+def alias_row_format(row):
+    """Format sqlite alias row output to dict"""
+    row = dict(row)
+    row['alias'] = str(netaddr.IPAddress(row['alias']))
+    row['ip'] = str(netaddr.IPAddress(row['ip']))
+    return row

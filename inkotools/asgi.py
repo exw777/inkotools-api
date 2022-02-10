@@ -168,6 +168,18 @@ def arp_search(req: ArpSearchModel):
     return fmt_result(data, meta={"entries": len(data)})
 
 
+class AliasesModel(BaseModel):
+    alias: Optional[IPv4Address] = None
+    vid: Optional[int] = None
+    ip: Optional[IPv4Address] = None
+
+
+@app.post('/db/aliases')
+def database_aliases_search(search: AliasesModel):
+    data = db.get_aliases(**dict(search))
+    return fmt_result(data, meta={"entries": len(data)})
+
+
 class SearchModel(BaseModel):
     keyword: str
 

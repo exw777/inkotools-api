@@ -1254,7 +1254,6 @@ class Switch:
                       mac: str = None,
                       vid: int = None):
         """Get arp table on l3 switches"""
-        log.debug(f'Got data: ip={ip}, mac={mac}, vid={vid}')
         if ip is None and mac is None and vid is None:
             return []
 
@@ -1290,6 +1289,15 @@ class Switch:
         res = [dict_fmt_int(m.groupdict()) for m in re.finditer(rgx, raw)]
         return res
 
+    def get_aliases(self):
+        """Get list of l3 interfaces ip and vid"""
+        if self.model != 'DXS-3600-32S':
+            return {'error': f'Model {self.model} not supported',
+                    'status_code': 422}
+        raw = self.send('sh ip interface brief | exclude down')
+        rgx = r'vlan(?P<vid>\d+) +(?P<alias>(?:\d+\.){3}\d+)'
+        res = [dict_fmt_int(m.groupdict()) for m in re.finditer(rgx, raw)]
+        return res
 
 ########################################################################
 # common functions

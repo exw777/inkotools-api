@@ -94,6 +94,15 @@ def update_database():
     log.info(f'Done in {end:.2f}s, {cnt} items added/updated.')
 
 
+def update_aliases():
+    """Update aliases for l3 switches"""
+    for s in db.search('DXS-3600-32S'):
+        sw = Switch(s['ip'])
+        log.info(f'Adding aliases for {sw.ip}')
+        cnt = db.add_aliases(sw.ip, sw.get_aliases())
+        log.info(f'Done, {cnt} entries added/updated.')
+
+
 def config_setup():
     """User-interactive secrets setup"""
     secrets = dict()
@@ -122,6 +131,7 @@ def main():
     # db module
     db_parser = module_parser.add_parser('db')
     db_parser.add_argument('-u', '--update', action='store_true')
+    db_parser.add_argument('--update-aliases', action='store_true')
 
     # cfg module
     cfg_parser = module_parser.add_parser('cfg')
@@ -160,7 +170,9 @@ def main():
     elif ARGS.module == 'db':
         if ARGS.update:
             update_database()
-        serve_module('db')
+        if ARGS.update_aliases:
+            update_aliases()
+        # serve_module('db')
 
     elif ARGS.module == 'cfg':
         if ARGS.setup:
