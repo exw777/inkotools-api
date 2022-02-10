@@ -232,7 +232,7 @@ class Switch:
 
     def _setup_telnet_model(self):
         """Get model via telnet"""
-        tn = pexpect.spawn(f'telnet {self.ip}', timeout=3, encoding="utf-8")
+        tn = pexpect.spawn(f'telnet {self.ip}', timeout=10, encoding="utf-8")
         matches = {
             'DXS-1210-12SC/A1': 'DXS-1210-12SC Switch',
             're':               r'[A-Z]{1,3}-?[0-9]{1,4}[^ ]*',
