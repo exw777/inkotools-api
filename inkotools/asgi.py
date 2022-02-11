@@ -255,12 +255,14 @@ def switch_get_summary(sw_ip: IPv4Address):
         status = sw.is_alive()
     # if switch is online, get online data
     if status:
+        data = db.get(sw.ip)
         new_data = {"ip": str(sw.ip),
                     "mac": str(sw.mac),
                     "model": sw.model,
                     "location": sw.location}
         # update offline data on changes
         if new_data != data:
+            log.info(f'Updating offline data for {sw.ip}')
             data = new_data
             db.add(data)
     if data is None:
