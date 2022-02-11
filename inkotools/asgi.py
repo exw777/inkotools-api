@@ -190,7 +190,8 @@ def arp_search(req: ArpSearchModel):
             status_code=500, detail='Failed to determine gateway')
     sw = get_sw_instance(gw)
     data = sw.get_arp_table(ip=ip, vid=req.vid, mac=req.mac)
-    return fmt_result(data, meta={"entries": len(data)})
+    meta = {"entries": len(data), "gateway": str(sw.ip)}
+    return fmt_result(data, meta)
 
 
 class AliasesModel(BaseModel):
