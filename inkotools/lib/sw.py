@@ -1252,7 +1252,8 @@ class Switch:
     def get_arp_table(self,
                       ip: str = None,
                       mac: str = None,
-                      vid: int = None):
+                      vid: int = None,
+                      check_mac_state: bool = False):
         """Get arp table on l3 switches"""
         if ip is None and mac is None and vid is None:
             return []
@@ -1287,6 +1288,13 @@ class Switch:
 
         raw = self.send(cmd)
         res = [dict_fmt_int(m.groupdict()) for m in re.finditer(rgx, raw)]
+
+        # check arp entries in mac table
+        if check_mac_state:
+            for item in res:
+                item['state'] = True if len(
+                    self.get_mac_table(mac=item['mac'])) == 1 else False
+
         return res
 
     def get_aliases(self):
