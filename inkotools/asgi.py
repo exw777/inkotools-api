@@ -114,26 +114,38 @@ def validate_port(sw: Switch, port_id: int):
 async def validation_exception_handler(request, exc):
     """Override validation errors formatting"""
     detail = ', '.join(
-        map(lambda err: err["loc"][-1]+' - ' + err["msg"], exc.errors()))
+        map(lambda err: ', '.join(map(str, err["loc"]))+' - '
+            + err["msg"], exc.errors()))
     return JSONResponse({"detail": detail}, status_code=422)
 
 
 class ArpSearchModel(BaseModel):
     ip: Optional[IPv4Address] = None
+    gw_ip: Optional[IPv4Address] = None
+    src_sw_ip: Optional[IPv4Address] = None
     vid: Optional[int] = None
     mac: Optional[str] = None
 
     @validator('ip')
     def ip_range(cls, v):
-        if int(str(v).split('.')[2]) in [57, 58, 59, 60, 47, 49, 123]:
+        if int(str(v).split('.')[2]) in COMMON['SERVICE_VLANS']:
             raise ValueError(f'{v} is not from clients subnet')
         return v
 
     @validator('vid')
     def vid_range(cls, v):
-        if (not (v in range(255) or v in [1148, 1150, 1151, 1152])
-                or v in [57, 58, 59, 60, 47, 49, 123]):
+        if (not (v in range(2, 255) or v in COMMON['PIP_VLANS'])
+                or v in COMMON['SERVICE_VLANS']):
             raise ValueError(f'{v} is not valid for client subnet')
+        return v
+
+    @validator('vid')
+    def vid_src_required(cls, v, values):
+        if (v in COMMON['PIP_VLANS']
+            and 'ip' not in values
+            and 'src_sw_ip' not in values
+                and 'gw_ip' not in values):
+            raise ValueError('PIP VID search needs src_sw_ip or gw_ip')
         return v
 
     @validator('mac')
@@ -143,9 +155,9 @@ class ArpSearchModel(BaseModel):
         return v
 
     @validator('mac')
-    def vid_required(cls, v, values):
-        if values['vid'] is None:
-            raise ValueError('VID is required for MAC search')
+    def mac_src_required(cls, v, values):
+        if 'src_sw_ip' not in values and 'gw_ip' not in values:
+            raise ValueError('MAC search needs src_sw_ip or gw_ip')
         return v
 
 
@@ -155,17 +167,23 @@ def arp_search(req: ArpSearchModel):
         raise HTTPException(status_code=422,
                             detail=('At least one of the following values '
                                     'must be provided: ip, mac, vid'))
-    gw = None
-    ip = None
-    if req.ip is not None:
-        ip = str(req.ip)
-        gw = ipcalc(req.ip)['gateway']
-    elif req.vid is not None:
-        if req.vid in [1148, 1150, 1151, 1152]:
-            HTTPException(
-                satus_code=409,
-                detail=f'Search MAC for VID {req.vid} not implemented yet')
-        gw = f'192.168.{str(req.vid)}.1'
+
+    ip = None if req.ip is None else str(req.ip)
+    gw = None if req.gw_ip is None else str(req.gw_ip)
+    src_sw = None if req.src_sw_ip is None else str(req.src_sw_ip)
+
+    if gw is None:
+        if ip is not None:
+            gw = ipcalc(req.ip)['gateway']
+        elif req.vid is not None and req.vid in range(255):
+            gw = f'192.168.{req.vid}.1'
+        elif src_sw is not None:
+            # get first client subnet from source switch for gateway
+            sw = get_sw_instance(src_sw)
+            for vl in sw.get_vlan_list():
+                if vl in range(255) and vl not in COMMON['SERVICE_VLANS']:
+                    gw = f'192.168.{vl}.1'
+                    break
 
     if gw is None:
         raise HTTPException(
