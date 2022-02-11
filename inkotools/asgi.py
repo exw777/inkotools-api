@@ -36,6 +36,17 @@ def get_sw_instance(sw_ip):
     # convert sw_ip from ipaddr.IPv4Address type to string
     sw_ip = str(sw_ip)
     try:
+        # check if ip is l3 alias
+        if sw_ip not in NETS:
+            log.debug(f'Searching aliases for {sw_ip}')
+            res = db.get_aliases(alias=sw_ip)
+            if len(res) == 1:
+                sw_ip = res[0]['ip']
+                log.debug(f'Found: {sw_ip}')
+            else:
+                log.debug(f'Alias for {sw_ip} not found')
+                raise Switch.UnavailableError()
+
         if sw_ip in SWITCHES:
             log.debug(f'attaching to existing instance of {sw_ip}')
             sw = SWITCHES[sw_ip]
@@ -44,11 +55,7 @@ def get_sw_instance(sw_ip):
         else:
             log.debug(f'creating new switch {sw_ip}')
             if COMMON['tcp_only_mode']:
-                if sw_ip in NETS:
-                    data = db.get(sw_ip)
-                else:
-                    # workaround not to get model via telnet on arp requests
-                    data = {"ip": sw_ip, "model": "DXS-3600-32S"}
+                data = db.get(sw_ip)
             else:
                 data = None
 
