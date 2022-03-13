@@ -72,10 +72,12 @@ class DB:
                         aliases.ip != excluded.ip;
                     '''
 
-    SEARCH = '''SELECT * from switches
+    SEARCH = '''SELECT *, count(*) OVER() AS full_count
+                FROM switches
                 WHERE model LIKE '%{word}%'
                 or location LIKE '%{word}%'
-                or mac LIKE '%{mac}%';
+                or mac LIKE '%{mac}%'
+                LIMIT {limit} OFFSET {offset};
                 '''
 
     def __init__(self, db_name):
@@ -233,15 +235,42 @@ class DB:
             log.error(f'Failed to clear database')
             return None
 
-    def search(self, word):
+    def search(self, word, per_page=10, page=1):
         """Search by mac, model or location
 
         Returns: list of dicts of strings (ip, mac, model, location)
         """
         # for mac search without '-' and ':'
         query = self.SEARCH.format(
-            word=word, mac=word.replace(':', '').replace('-', ''))
-        return [sw_row_format(row) for row in self._exec(query)]
+            word=word,
+            mac=word.replace(':', '').replace('-', ''),
+            limit=per_page,
+            offset=(page-1)*per_page)
+        result = []
+        full_count = 0
+        for row in self._exec(query):
+            if full_count == 0:
+                full_count = row['full_count']
+            result.append(sw_row_format(row))
+        count = len(result)
+        page_count = full_count // per_page
+        if full_count > (page_count * per_page):
+            page_count += 1
+        if count == 0 and page == 1:
+            return {"error": "Not found", "status_code": 404}
+        elif count == 0 and page > 1:
+            return {"error": "Page out of range", "status_code": 422}
+
+        meta = {
+            "entries": {
+                "current": count,
+                "total": full_count,
+                "per_page": per_page},
+            "pages": {
+                "current": page,
+                "total": page_count}
+        }
+        return {"data": result, "meta": meta}
 
     def ip_list(self):
         """Get list of all ip addresses"""
@@ -295,6 +324,9 @@ def sw_row_format(row):
     row = dict(row)
     row['ip'] = str(netaddr.IPAddress(row['ip']))
     row['mac'] = str(netaddr.EUI(row['mac']))
+    # remove full_count from search
+    if 'full_count' in row.keys():
+        row.pop('full_count')
     return row
 
 

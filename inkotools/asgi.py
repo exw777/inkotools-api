@@ -209,12 +209,14 @@ def database_aliases_search(search: AliasesModel):
 
 class SearchModel(BaseModel):
     keyword: str
+    per_page: Optional[int] = 10
+    page: Optional[int] = 1
 
 
 @app.post('/db/search')
 def database_search(search: SearchModel):
-    data = db.search(search.keyword)
-    return fmt_result(data, meta={"entries": len(data)})
+    res = db.search(search.keyword, search.per_page, search.page)
+    return fmt_result(res)
 
 
 @app.get('/db/sw/{sw_ip}/')
