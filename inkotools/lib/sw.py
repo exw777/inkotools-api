@@ -13,7 +13,6 @@ from time import time
 # external imports
 import netaddr
 import pexpect
-from icmplib import ping as icmp_ping
 from jinja2 import Environment as j2env
 from jinja2 import FileSystemLoader as j2loader
 
@@ -29,6 +28,7 @@ if COMMON['tcp_only_mode']:
 else:
     from arpreq import arpreq
     from easysnmp import snmp_get
+    from icmplib import ping as icmp_ping
 
 
 class Switch:
