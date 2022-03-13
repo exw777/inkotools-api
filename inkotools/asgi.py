@@ -216,7 +216,12 @@ class SearchModel(BaseModel):
 @app.post('/db/search')
 def database_search(search: SearchModel):
     res = db.search(search.keyword, search.per_page, search.page)
-    return fmt_result(res)
+    try:
+        # try to extract data and meta
+        return fmt_result(**res)
+    except Exception:
+        # if returned error
+        return fmt_result(res)
 
 
 @app.get('/db/sw/{sw_ip}/')
