@@ -270,6 +270,42 @@ def get_ipcalc_summary(ip: IPv4Address):
     return fmt_result(data)
 
 
+@app.get('/pool')
+def pool_get_list():
+    data = list(SWITCHES.keys())
+    return fmt_result(data, meta={"entries": len(data)})
+
+
+@app.delete('/pool')
+def pool_clear():
+    SWITCHES.clear()
+    return fmt_result("Pool cleared")
+
+
+@app.delete('/pool/{sw_ip}/')
+def pool_delete_item(sw_ip: IPv4Address):
+    sw_ip = str(sw_ip)
+    if not sw_ip in SWITCHES:
+        raise HTTPException(
+            status_code=404, detail=f'{sw_ip} instance not found in pool')
+    del SWITCHES[sw_ip]
+    return fmt_result(f'{sw_ip} instance removed from pool')
+
+
+@app.post('/pool/{sw_ip}/')
+def pool_add_item(sw_ip: IPv4Address):
+    sw_ip = str(sw_ip)
+    # remove old instance if exists
+    if sw_ip in SWITCHES:
+        del SWITCHES[sw_ip]
+        msg = 'recreated in'
+    else:
+        msg = 'added to'
+    # create new instance
+    get_sw_instance(sw_ip)
+    return fmt_result(f'{sw_ip} instance {msg} pool')
+
+
 @app.get('/sw/{sw_ip}/')
 def switch_get_summary(sw_ip: IPv4Address):
     # get offline data
