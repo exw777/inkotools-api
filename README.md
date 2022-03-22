@@ -1,3 +1,5 @@
+[![GitHub Workflow Status](https://img.shields.io/github/workflow/status/truman369/inkotools-api/build?logo=docker&style=plastic)](https://github.com/truman369/inkotools-api/actions/workflows/build.yml)
+[![Docker Image Version](https://img.shields.io/docker/v/truman369/inkotools-api?label=latest&sort=semver&style=plastic)](https://hub.docker.com/r/truman369/inkotools-api/tags)
 # Inko Tools
 > Скрипты для упрощения работы с коммутаторами в сети ИНКО
 
