@@ -646,25 +646,6 @@ class Switch:
                     i['mask'] = '255.255.255.255'
                 elif i['profile_id'] == 20:
                     i['mask'] = '0.0.0.0'
-
-            # TODO: returned data checking must be on frontend
-
-            # check if there are non-standart mask in acl rules
-            # check non-standard mask
-            # if ('mask' in i.keys() and (
-            #     i['mask'] != '255.255.255.255' and i['profile_id'] == 10
-            #     or i['mask'] != '0.0.0.0' and i['profile_id'] == 20
-            #   )
-            # ):
-            #     self.log.warning(f"port {i['port']} acl {i['ip']}"
-            #                      f" has non-standard mask: {i['mask']}")
-        # check if there are several acl for one port
-        # TODO: check only one profile_id
-        # ports = list(map(lambda x: x['port'], result))
-        # for p in set(ports):
-        #     cnt = ports.count(p)
-        #     if cnt > 1:
-        #         self.log.warning(f'port {p} has {cnt} acl rules')
         return result
 
     def add_acl(self, port, ip):
@@ -831,7 +812,6 @@ class Switch:
         for vid in vid_list:
             self.delete_vlan(vid)
 
-    # TODO: return untagged as list and check overlapping on higher level
     def get_vlan_port(self, port):
         """Get vlan information from port
 
@@ -843,12 +823,6 @@ class Switch:
 
             {'error': e} - on exception
             """
-
-        # check port is valid
-        # if port and not int(port) in (self.access_ports + self.transit_ports):
-        #     self.log.error(f'port {port} out of range')
-        #     return None
-
         try:
             raw = self.send(template='vlan_port.j2', port=port)
         except Exception as e:
@@ -873,34 +847,6 @@ class Switch:
                     untagged.append(int(r.group('vid')))
                 if r.group('t') == 'X':
                     tagged.append(int(r.group('vid')))
-
-        # ALL OUTPUT CHECKS - ON FRONTEND
-        #
-        # try to workaround common situation:
-        # double vlan on access port and one of them is default (vid 1)
-        # if (
-        #     len(untagged) == 2
-        #     and 1 in untagged
-        #     and port in self.access_ports
-        # ):
-        #     tmp = set(untagged)
-        #     tmp.remove(1)
-        #     untagged = list(tmp)
-        #     self.log.warning(
-        #         f'Check configuration! Ignoring vid 1 '
-        #         f'with double untagged vlan on access port {port}'
-        #     )
-        # # check for several untagged vlans and raise error
-        # if len(untagged) > 1:
-        #     self.log.error(
-        #         f'several untagged vlans on one port! '
-        #         f'port {port}, vlans: {untagged}'
-        #     )
-        #     return False
-        # elif untagged:
-        #     untagged = int(untagged[0])
-        # else:
-        #     untagged = None
 
         return {'port': port, 'untagged': untagged, 'tagged': tagged}
 
