@@ -1,6 +1,6 @@
-[![GitHub Workflow Status](https://img.shields.io/github/workflow/status/truman369/inkotools-api/build?logo=docker&style=plastic)](https://github.com/truman369/inkotools-api/actions/workflows/build.yml)
-[![Docker Image Version](https://img.shields.io/docker/v/truman369/inkotools-api?label=latest&sort=semver&style=plastic)](https://hub.docker.com/r/truman369/inkotools-api/tags)
-# Inko Tools
+[![Publish Status](https://img.shields.io/github/workflow/status/truman369/inkotools-api/Publish%20to%20Docker%20Hub?label=publish&logo=docker&style=plastic)](https://hub.docker.com/r/truman369/inkotools-api/tags)
+[![Latest Version](https://img.shields.io/docker/v/truman369/inkotools-api?label=latest&logo=github&sort=semver&style=plastic)](https://github.com/truman369/inkotools-api/tags)
+# Inko Tools 
 > Скрипты для упрощения работы с коммутаторами в сети ИНКО
 
 > **Внимание!** Проект находится в стадии разработки. Возможны изменения, ломающие обратную совместимость. Данное руководство может иметь незавершенные разделы или отсутствующие описания функций. Для актуальной информации рекомендуется смотреть непосредственно текущий код.
