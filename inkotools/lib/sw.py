@@ -1253,6 +1253,19 @@ class Switch:
         res = [dict_fmt_int(m.groupdict()) for m in re.finditer(rgx, raw)]
         return res
 
+    def get_mcast_ports(self):
+        """Get lists of source and member multicast ports"""
+        if not re.search(r'DES-(?!3026)|DGS-(3000|1210)', self.model):
+            return {'error': f'Model {self.model} not supported',
+                    'status_code': 422}
+        raw = self.send('show igmp_snooping multicast_vlan')
+        rgx = (r'[^ ](?:Untagged )?Member(?:\(Untagged\))? [Pp]orts +: ?'
+               r'(?P<member>[-,0-9]+)?(?s:.*)'
+               r'[^ ]Source (?:\(Tagged\))?[Pp]orts +: ?'
+               r'(?P<source>[-,0-9]+)?')
+        d = re.search(rgx, raw).groupdict()
+        return dict(zip(d.keys(), map(interval_to_list, d.values())))
+
 ########################################################################
 # common functions
 
