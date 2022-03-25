@@ -45,13 +45,13 @@ def get_sw_instance(sw_ip):
                 log.debug(f'Found: {sw_ip}')
             else:
                 log.debug(f'Alias for {sw_ip} not found')
-                raise Switch.UnavailableError()
+                raise Switch.UnavailableError(f'{sw_ip} not found')
 
         if sw_ip in SWITCHES:
             log.debug(f'attaching to existing instance of {sw_ip}')
             sw = SWITCHES[sw_ip]
             if not sw.is_alive():
-                raise Switch.UnavailableError()
+                raise Switch.UnavailableError(f'{sw_ip} is not available')
         else:
             log.debug(f'creating new switch {sw_ip}')
             if COMMON['tcp_only_mode']:
