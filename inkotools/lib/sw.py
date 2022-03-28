@@ -547,7 +547,7 @@ class Switch:
                     r'(?P<link>Link ?Down|10+\w/(?:Full|Half))(?:/\w+)?\s+'
                     r'(?P<learning>Enabled|Disabled)\s+'
                     r'(?P<autodowngrade>Enabled|Disabled|-)?'
-                    r'(?s:.*?)Desc[a-z]*: +(?P<desc>[\w "]*[\w"])?'
+                    r'(?s:.*?)Desc[a-z]*: +(?P<desc>.*[^\s])?'
                 )
                 result = [m.groupdict() for m in re.finditer(rgx, raw)]
                 # convert values
