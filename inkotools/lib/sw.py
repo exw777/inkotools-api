@@ -1266,6 +1266,19 @@ class Switch:
         d = re.search(rgx, raw).groupdict()
         return dict(zip(d.keys(), map(interval_to_list, d.values())))
 
+    def get_port_bandwidth(self, port: int):
+        """Get port bandwidth limits"""
+        if not re.search(r'DES|DGS', self.model):
+            return {'error': f'Model {self.model} not supported',
+                    'status_code': 422}
+        raw = self.send(f'show bandwidth_control {port}')
+        # if no limit - return null
+        rgx = (r'\d\ +((?:[Nn]o[ _][Ll]imit)|(?P<rx>\d+)) +'
+               r'((?:[Nn]o[ _][Ll]imit)|(?P<tx>\d+)) *')
+        res = re.search(rgx, raw).groupdict()
+        return dict_fmt_int(res)
+
+
 ########################################################################
 # common functions
 

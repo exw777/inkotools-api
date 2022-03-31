@@ -431,3 +431,11 @@ def switch_get_port_mac_table(sw_ip: IPv4Address, port_id: int):
     validate_port(sw, port_id)
     data = sw.get_mac_table(port=port_id)
     return fmt_result(data, meta={"entries": len(data)})
+
+
+@app.get('/sw/{sw_ip}/ports/{port_id}/bandwidth')
+def switch_get_port_bandwidth(sw_ip: IPv4Address, port_id: int):
+    sw = get_sw_instance(sw_ip)
+    validate_port(sw, port_id)
+    data = sw.get_port_bandwidth(port=port_id)
+    return fmt_result(data)
