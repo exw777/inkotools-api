@@ -1296,6 +1296,36 @@ class Switch:
                 res.append(m['group'])
         return res
 
+    def get_port_mcast_filters(self, port: int):
+        """Get list of allowed multicast groups on port"""
+        if not re.search(r'DES-(?!3026)|DGS-(3000|1210)', self.model):
+            return {'error': f'Model {self.model} not supported',
+                    'status_code': 422}
+
+        raw = self.send(f'show limited_multicast_addr ports {port}')
+
+        if re.search(r'3028|1210', self.model):
+            # this models shows only profile id, need to get groups
+            rgx_profile = r'(?:Profile Id:|Permit) ?(?P<group_id>[-,0-9]*)'
+            m = re.search(rgx_profile, raw)
+            # if there are several profiles, check them all
+            cmd = []
+            for i in interval_to_list(m.groupdict()['group_id']):
+                cmd.append(f'show mcast_filter_profile profile_id {i}')
+            # no ids found - return empty list
+            if len(cmd) == 0:
+                return []
+            # else - get groups from profiles
+            raw = self.send(cmd)
+
+        rgx_ip = r'(?:\d+\.){3}\d+'
+        rgx = rf'({rgx_ip}[- ~]+{rgx_ip})'
+        res = re.findall(rgx, raw)
+        # convert values to the same form
+        res = list(map(lambda s: re.sub(r'[- ~]+', ' - ', s), res))
+
+        return res
+
 ########################################################################
 # common functions
 
