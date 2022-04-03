@@ -1273,11 +1273,28 @@ class Switch:
                     'status_code': 422}
         raw = self.send(f'show bandwidth_control {port}')
         # if no limit - return null
-        rgx = (r'\d\ +((?:[Nn]o[ _][Ll]imit)|(?P<rx>\d+)) +'
-               r'((?:[Nn]o[ _][Ll]imit)|(?P<tx>\d+)) *')
+        rgx = (r'\d\ +((?i:no[ _]limit)|(?P<rx>\d+)) +'
+               r'((?i:no[ _]limit)|(?P<tx>\d+)) *')
         res = re.search(rgx, raw).groupdict()
         return dict_fmt_int(res)
 
+    def get_port_mcast_groups(self, port: int):
+        """Get list of multicast groups on port"""
+        if not re.search(r'DES-(?!3026)|DGS-(3000|1210)', self.model):
+            return {'error': f'Model {self.model} not supported',
+                    'status_code': 422}
+        if re.search(r'1210|3000|c1', self.model):
+            raw = self.send(f'show igmp_snooping group ports {port}')
+        else:
+            raw = self.send('show igmp_snooping group vlan 1500')
+        rgx = (r'(?P<group>(?:\d+\.){3}\d+)(?s:.*?)'
+               r'(?i:member[ \w]*: *)(?P<ports>\d+(?:[- ,0-9]*\d)?)')
+        res = []
+        # add only the groups, that contain selected port
+        for m in re.finditer(rgx, raw):
+            if port in interval_to_list(m['ports']):
+                res.append(m['group'])
+        return res
 
 ########################################################################
 # common functions
