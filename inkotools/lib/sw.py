@@ -30,6 +30,9 @@ else:
     from easysnmp import snmp_get
     from icmplib import ping as icmp_ping
 
+# simple ip regexp
+RGX_IP = r'(?:\d{1,3}\.){3}\d{1,3}'
+
 
 class Switch:
     """Simple switch class
@@ -608,45 +611,49 @@ class Switch:
                                port=port, state=state, comment=comment)
         return result
 
-    def get_acl(self, port=None):
-        """Get acl from switch
-
-        If port is not defined, returns all entries
-        """
-        try:
-            result = self.send(template='acl.j2', port=port)
-        except Exception as e:
-            self.log.error(f'get acl error: {e}')
-            return {'error': e}
-        if result is None:
-            return {'error': 'Command execution failed'}
+    def get_acl(self, port: int):
+        """Get port acl"""
+        if not re.search(r'DES-(?!3026)|DGS-(3000|1210)|QSW', self.model):
+            return {'error': f'Model {self.model} not supported',
+                    'status_code': 422}
         if re.search('QSW', self.model):
-            # q-tech
-            regex = (r'Interface Ethernet1/(?P<port>\d{1,2})'
-                     r'\s+am port\s+am ip-pool\s+'
-                     r'(?P<ip>\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3})')
+            raw = self.send(f'sh am int eth 1/{port}')
+            rgx = (r'Interface Ethernet1/(?P<port>\d{1,2})'
+                   r'\s+am port\s+am ip-pool\s+'
+                   rf'(?P<ip>{RGX_IP})')
+            res = [dict_fmt_int(m.groupdict()) for m in re.finditer(rgx, raw)]
+        # workaround for 1210, which is too slow when requesting config
+        elif re.search('1210', self.model):
+            rgx = (r'Access ID: (?P<access_id>\d+)\s*'
+                   r'Mode: (?P<mode>Permit|Deny)(?:[\s\w:]+)'
+                   rf'Ports: (?P<port>{port})\s*'
+                   rf'Source IP *: (?P<ip>{RGX_IP}) *'
+                   rf'Source IP Mask *: (?P<mask>{RGX_IP})')
+            res = []
+            # separate command for each profile
+            for p_id in [10, 20]:
+                raw = self.send(f'show access_profile profile_id {p_id}')
+                # manual insert profile_id
+                for m in re.finditer(rgx, raw):
+                    d = dict_fmt_int(m.groupdict())
+                    d['profile_id'] = p_id
+                    d['mode'] = d['mode'].lower()
         else:
-            # d-link
-            regex = (
-                r'profile_id\s+(?P<profile_id>\d+)\s.*'
-                r'access_id\s+(?P<access_id>\d+)\s+.*'
-                r'source_ip\s+(?P<ip>\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3})\s*'
-                r'(.+mask\s+(?P<mask>\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}))?'
-                r'\s+port\s+(?P<port>\d{1,2})\s+(?P<mode>\w+)'
-            )
-        result = [m.groupdict() for m in re.finditer(regex, result)]
-        for i in result:
-            # set int data type for numbers
-            for k in ['profile_id', 'access_id', 'port']:
-                if k in i.keys():
-                    i[k] = int(i[k])
+            raw = self.send(f'sh conf cur inc "port {port} "')
+            rgx = (r'profile_id\s+(?P<profile_id>\d+)\s.*'
+                   r'access_id\s+(?P<access_id>\d+)\s+.*'
+                   rf'source_ip\s+(?P<ip>{RGX_IP})\s*'
+                   rf'(.+mask\s+(?P<mask>{RGX_IP}))?'
+                   r'\s+port\s+(?P<port>\d{1,2})\s+(?P<mode>\w+)')
+            res = [dict_fmt_int(m.groupdict()) for m in re.finditer(rgx, raw)]
             # set default mask
-            if 'mask' in i.keys() and i['mask'] is None:
-                if i['profile_id'] == 10:
-                    i['mask'] = '255.255.255.255'
-                elif i['profile_id'] == 20:
-                    i['mask'] = '0.0.0.0'
-        return result
+            for i in res:
+                if 'mask' in i.keys() and i['mask'] is None:
+                    if i['profile_id'] == 10:
+                        i['mask'] = '255.255.255.255'
+                    elif i['profile_id'] == 20:
+                        i['mask'] = '0.0.0.0'
+        return res
 
     def add_acl(self, port, ip):
         """Add acl to switch port"""
@@ -1318,8 +1325,7 @@ class Switch:
             # else - get groups from profiles
             raw = self.send(cmd)
 
-        rgx_ip = r'(?:\d+\.){3}\d+'
-        rgx = rf'({rgx_ip}[- ~]+{rgx_ip})'
+        rgx = rf'({RGX_IP}[- ~]+{RGX_IP})'
         res = re.findall(rgx, raw)
         # convert values to the same form
         res = list(map(lambda s: re.sub(r'[- ~]+', ' - ', s), res))
