@@ -638,6 +638,7 @@ class Switch:
                     d = dict_fmt_int(m.groupdict())
                     d['profile_id'] = p_id
                     d['mode'] = d['mode'].lower()
+                    res.append(d)
         else:
             raw = self.send(f'sh conf cur inc "port {port} "')
             rgx = (r'profile_id\s+(?P<profile_id>\d+)\s.*'
