@@ -106,7 +106,7 @@ def update_aliases():
 def config_setup():
     """User-interactive secrets setup"""
     secrets = dict()
-    for profile in ['user_profile', 'admin_profile']:
+    for profile in ['user_profile', 'admin_profile', 'gray_database']:
         print(f'Setting up {profile}')
         secrets[profile] = dict()
         secrets[profile]['login'] = input('login: ')

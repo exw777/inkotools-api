@@ -2,6 +2,9 @@
 # database file name without extension
 DB_FILE: switches
 
+# gray database url
+GRAYDB_URL: http://192.168.255.251
+
 # relative path on tftp server for backups
 backup_dir: ''
 # host ip (last octet) of tftp server for backups
