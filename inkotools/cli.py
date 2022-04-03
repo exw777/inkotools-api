@@ -96,7 +96,7 @@ def update_database():
 
 def update_aliases():
     """Update aliases for l3 switches"""
-    for s in db.search('DXS-3600-32S'):
+    for s in db.search('DXS-3600-32S')['data']:
         sw = Switch(s['ip'])
         log.info(f'Adding aliases for {sw.ip}')
         cnt = db.add_aliases(sw.ip, sw.get_aliases())
