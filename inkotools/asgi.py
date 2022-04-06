@@ -120,7 +120,13 @@ async def validation_exception_handler(request, exc):
     detail = ', '.join(
         map(lambda err: ', '.join(map(str, err["loc"]))+' - '
             + err["msg"], exc.errors()))
-    return JSONResponse({"detail": detail}, status_code=422)
+    return JSONResponse(content={"detail": detail}, status_code=422)
+
+
+@app.exception_handler(GRAYDB.NotFoundError)
+async def graydb_404_exception_handler(request, exc):
+    """Gray database not found error handler"""
+    return JSONResponse(content={"detail": str(exc)}, status_code=404)
 
 
 class ContractID(str):

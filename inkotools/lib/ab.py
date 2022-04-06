@@ -39,7 +39,17 @@ class GRAYDB:
 
     class CredentialsError(Exception):
         """Custom exception on wrong creds"""
-        pass
+
+        def __init__(self, msg="Wrong login or password!"):
+            self.message = msg
+            super().__init__(self.message)
+
+    class NotFoundError(Exception):
+        """Custom exception for not found errors"""
+
+        def __init__(self, msg="Client not found"):
+            self.message = msg
+            super().__init__(self.message)
 
     def _login(self):
         """Login to graydb"""
@@ -53,7 +63,7 @@ class GRAYDB:
             b.submit_selected()
             # check if auth form again - wrong login
             if len(b.page.select('form[name=auth]')) > 0:
-                raise self.CredentialsError('Wrong login or password!')
+                raise self.CredentialsError()
             else:
                 log.debug('Logged in successfully')
         else:
@@ -67,13 +77,13 @@ class GRAYDB:
             # 2nd row - 1st account, 4th column - ip addresses
             res = raw.soup.table.contents[1].contents[3].string.strip('; ')
             if res == '':
-                return {"error": "No ip address found", "status_code": 404}
+                raise self.NotFoundError('No ip address found')
             # split several ips to list
             res = res.split('; ')
             log.debug(f'[{contract_id}] {res}')
         except IndexError:
             log.error(f'Primary account not found')
-            return {"error": "Primary account not found", "status_code": 404}
+            raise self.NotFoundError('Primary account not found')
         return res
 
     def get_client_by_ip(self, client_ip: str):
@@ -87,4 +97,5 @@ class GRAYDB:
             contract_id = row.find('td').string.strip()
             if client_ip in self.get_client_ip_list(contract_id):
                 return int(contract_id)
-        return {"error": "Client not found", "status_code": 404}
+
+        raise self.NotFoundError()
