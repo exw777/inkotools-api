@@ -6,10 +6,10 @@ import collections.abc
 import logging
 import logging.config
 import pathlib
-import yaml
 
 # external imports
 import netaddr
+import yaml
 
 # module logger
 log = logging.getLogger(__name__)
