@@ -3,7 +3,7 @@
 DB_FILE: switches
 
 # gray database url
-GRAYDB_URL: http://192.168.255.251
+GRAYDB_URL: https://graydb.inko.tools
 
 # relative path on tftp server for backups
 backup_dir: ''
