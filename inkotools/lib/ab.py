@@ -99,3 +99,13 @@ class GRAYDB:
                 return int(contract_id)
 
         raise self.NotFoundError()
+
+    def get_internal_client_id(self, contract_id: int):
+        """Get internal client id in gray database"""
+        raw = self.browser.post(f'{self.baseurl}/poisk_test.php',
+                                data={"dogovor": contract_id, "startt": 1})
+        f = raw.soup.find('input', {'name': 'id_aabon'})
+        if f is None:
+            raise self.NotFoundError()
+        res = int(f.get('value'))
+        return res
