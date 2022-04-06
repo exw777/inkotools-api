@@ -14,9 +14,10 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ValidationError, validator
 
 # local imports
-from lib.cfg import COMMON, NETS
+from lib.cfg import COMMON, NETS, SECRETS
 from lib.db import DB
 from lib.sw import Switch, ipcalc
+from lib.ab import GRAYDB
 
 # module logger
 log = logging.getLogger(__name__)
@@ -24,6 +25,9 @@ log = logging.getLogger(__name__)
 
 # init db
 db = DB(COMMON['DB_FILE'])
+
+# init graydb
+ab = GRAYDB(COMMON['GRAYDB_URL'], SECRETS['gray_database'])
 
 # init fastapi
 app = FastAPI()
@@ -117,6 +121,26 @@ async def validation_exception_handler(request, exc):
         map(lambda err: ', '.join(map(str, err["loc"]))+' - '
             + err["msg"], exc.errors()))
     return JSONResponse({"detail": detail}, status_code=422)
+
+
+class ContractID(str):
+    """Contract id field type"""
+
+    @classmethod
+    def __get_validators__(cls):
+        yield cls.validate_contract_id
+
+    @classmethod
+    def validate_contract_id(cls, v):
+        if not re.search(r'^\d{5}$', v):
+            raise ValueError('invalid contract id')
+        return cls(v)
+
+
+@app.get('/ab/{contract_id}/ips')
+def ab_get_client_ip_list(contract_id: ContractID):
+    data = ab.get_client_ips(contract_id)
+    return fmt_result(data)
 
 
 class ArpSearchModel(BaseModel):
