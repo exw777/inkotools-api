@@ -59,7 +59,7 @@ class GRAYDB:
         else:
             log.debug('Already logged in')
 
-    def get_client_ips(self, contract_id: int):
+    def get_client_ip_list(self, contract_id: int):
         """Get list of client ips from billing"""
         raw = self.browser.post(f'{self.baseurl}/bil.php',
                                 data={"nome_dogo": contract_id, "go": 1})
@@ -75,3 +75,16 @@ class GRAYDB:
             log.error(f'Primary account not found')
             return {"error": "Primary account not found", "status_code": 404}
         return res
+
+    def get_client_by_ip(self, client_ip: str):
+        """Find contract with client ip"""
+        client_ip = str(client_ip)
+        raw = self.browser.post(f'{self.baseurl}/poisk_test.php',
+                                data={"ip": client_ip, "go99": 1})
+        # graydb has fuzzy search, so iterate through several contracts
+        # and check if contract's ip is the searched ip
+        for row in raw.soup.select('tbody tr'):
+            contract_id = row.find('td').string.strip()
+            if client_ip in self.get_client_ip_list(contract_id):
+                return int(contract_id)
+        return {"error": "Client not found", "status_code": 404}
