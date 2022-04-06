@@ -149,6 +149,12 @@ def ab_get_client_ip_list(contract_id: ContractID):
     return fmt_result(data)
 
 
+@app.get('/ab/{contract_id}/billing')
+def ab_get_billing_info(contract_id: ContractID):
+    data = ab.get_billing_info(contract_id)
+    return fmt_result(data)
+
+
 @app.get('/ab/findip/{client_ip}')
 def ab_get_client_by_ip(client_ip: IPv4Address):
     data = ab.get_client_by_ip(client_ip)

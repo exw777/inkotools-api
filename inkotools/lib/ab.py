@@ -86,6 +86,34 @@ class GRAYDB:
             raise self.NotFoundError('Primary account not found')
         return res
 
+    def get_billing_info(self, contract_id: int):
+        """Get list of client services from billing"""
+        raw = self.browser.post(f'{self.baseurl}/bil.php',
+                                data={"nome_dogo": contract_id, "go": 1})
+        res = []
+        for row in raw.soup.select('table tr')[1:]:
+            account_id = int(row.contents[0].string)
+            services = list(row.contents[1].strings)
+            tariff = row.contents[2].string
+            ips = row.contents[3].string.strip('; ')
+            if ips == '':
+                ip_list = []
+            else:
+                ip_list = ips.split('; ')
+            balance = float(row.contents[5].string)
+            credit = float(row.contents[7].string)
+            status = row.contents[8].string
+            res.append({
+                'account_id': account_id,
+                'services': services,
+                'tariff': tariff,
+                'ip_list': ip_list,
+                'balance': balance,
+                'credit': credit,
+                'status': status,
+            })
+        return res
+
     def get_client_by_ip(self, client_ip: str):
         """Find contract with client ip"""
         client_ip = str(client_ip)
