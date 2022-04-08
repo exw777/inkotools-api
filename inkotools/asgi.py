@@ -17,7 +17,7 @@ from pydantic import BaseModel, ValidationError, validator
 from lib.cfg import COMMON, NETS, SECRETS
 from lib.db import DB
 from lib.sw import Switch, ipcalc
-from lib.ab import GRAYDB
+from lib.gdb import GRAYDB
 
 # module logger
 log = logging.getLogger(__name__)
@@ -27,7 +27,7 @@ log = logging.getLogger(__name__)
 db = DB(COMMON['DB_FILE'])
 
 # init graydb
-ab = GRAYDB(COMMON['GRAYDB_URL'], SECRETS['gray_database'])
+gdb = GRAYDB(COMMON['GRAYDB_URL'], SECRETS['gray_database'])
 
 # init fastapi
 app = FastAPI()
@@ -127,33 +127,6 @@ async def validation_exception_handler(request, exc):
 async def graydb_404_exception_handler(request, exc):
     """Gray database not found error handler"""
     return JSONResponse(content={"detail": str(exc)}, status_code=404)
-
-
-class ContractID(str):
-    """Contract id field type"""
-
-    @classmethod
-    def __get_validators__(cls):
-        yield cls.validate_contract_id
-
-    @classmethod
-    def validate_contract_id(cls, v):
-        if not re.search(r'^\d{5}$', v):
-            raise ValueError('invalid contract id')
-        return cls(v)
-
-
-@app.get('/ab/{contract_id}/')
-def ab_get_client_by_contract(contract_id: ContractID):
-    data = ab.get_client_data(contract_id)
-    data['billing_accounts'] = ab.get_billing_accounts(contract_id)
-    return fmt_result(data)
-
-
-@app.get('/ab/by-ip/{client_ip}/')
-def ab_get_client_by_ip(client_ip: IPv4Address):
-    contract_id = ab.get_contract_by_ip(client_ip)
-    return ab_get_client_by_contract(contract_id)
 
 
 class ArpSearchModel(BaseModel):
@@ -296,6 +269,33 @@ def database_add_switch(sw_ip: IPv4Address):
     else:
         raise HTTPException(
             status_code=500, detail=f'failed to add {sw_ip}')
+
+
+class ContractID(str):
+    """Contract id field type"""
+
+    @classmethod
+    def __get_validators__(cls):
+        yield cls.validate_contract_id
+
+    @classmethod
+    def validate_contract_id(cls, v):
+        if not re.search(r'^\d{5}$', v):
+            raise ValueError('invalid contract id')
+        return cls(v)
+
+
+@app.get('/gdb/{contract_id}/')
+def gdb_get_client_by_contract(contract_id: ContractID):
+    data = gdb.get_client_data(contract_id)
+    data['billing_accounts'] = gdb.get_billing_accounts(contract_id)
+    return fmt_result(data)
+
+
+@app.get('/gdb/by-ip/{client_ip}/')
+def gdb_get_client_by_ip(client_ip: IPv4Address):
+    contract_id = gdb.get_contract_by_ip(client_ip)
+    return gdb_get_client_by_contract(contract_id)
 
 
 @app.get('/ipcalc/{ip}/')

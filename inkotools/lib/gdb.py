@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# lib/ab.py
+# lib/gdb.py
 
 # internal imports
 import logging
