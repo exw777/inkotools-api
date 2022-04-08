@@ -69,49 +69,46 @@ class GRAYDB:
         else:
             log.debug('Already logged in')
 
-    def get_client_ip_list(self, contract_id: int):
+    def get_client_ip_list(self, contract_id: str):
         """Get list of client ips from billing"""
-        raw = self.browser.post(f'{self.baseurl}/bil.php',
-                                data={"nome_dogo": contract_id, "go": 1})
-        try:
-            # 2nd row - 1st account, 4th column - ip addresses
-            res = raw.soup.table.contents[1].contents[3].string.strip('; ')
-            if res == '':
-                raise self.NotFoundError('No ip address found')
-            # split several ips to list
-            res = res.split('; ')
-            log.debug(f'[{contract_id}] {res}')
-        except IndexError:
-            log.error(f'Primary account not found')
-            raise self.NotFoundError('Primary account not found')
-        return res
+        inet = self.get_billing_accounts(contract_id)['internet']
+        if len(inet) == 0:
+            raise self.NotFoundError('Internet account not found')
+        return inet['ip_list']
 
-    def get_billing_info(self, contract_id: int):
+    def get_billing_accounts(self, contract_id: str):
         """Get list of client services from billing"""
         raw = self.browser.post(f'{self.baseurl}/bil.php',
                                 data={"nome_dogo": contract_id, "go": 1})
-        res = []
-        for row in raw.soup.select('table tr')[1:]:
-            account_id = int(row.contents[0].string)
-            services = list(row.contents[1].strings)
-            tariff = row.contents[2].string
-            ips = row.contents[3].string.strip('; ')
-            if ips == '':
-                ip_list = []
-            else:
-                ip_list = ips.split('; ')
-            balance = float(row.contents[5].string)
-            credit = float(row.contents[7].string)
+        account_types = [
+            "internet",
+            "telephony",
+            "ld_telephony",
+            "television",
+        ]
+        # init res dict with empty accounts
+        res = dict.fromkeys(account_types, {})
+        # iterate through all accounts (first row is table header)
+        for idx, row in enumerate(raw.soup.select('table tr')[1:]):
+            item = {}
+            item['account_id'] = int(row.contents[0].string)
+            item['services'] = list(row.contents[1].strings)
+            # remove `,` and `;` symbols and split without empty strings
+            ip_tel = row.contents[3].string.translate(
+                {ord(i): None for i in ';,'}).split()
+            # internet
+            if idx == 0:
+                item['tariff'] = row.contents[2].string
+                item['ip_list'] = ip_tel
+            # telephony
+            elif idx < 3:
+                item['number_list'] = ip_tel
+            item['balance'] = float(row.contents[5].string)
+            item['credit'] = float(row.contents[7].string)
             status = row.contents[8].string
-            res.append({
-                'account_id': account_id,
-                'services': services,
-                'tariff': tariff,
-                'ip_list': ip_list,
-                'balance': balance,
-                'credit': credit,
-                'status': status,
-            })
+            item['enabled'] = True if status == "Разблокирован" else False
+            res[account_types[idx]] = item
+
         return res
 
     def get_client_by_ip(self, client_ip: str):
@@ -124,11 +121,11 @@ class GRAYDB:
         for row in raw.soup.select('tbody tr'):
             contract_id = row.find('td').string.strip()
             if client_ip in self.get_client_ip_list(contract_id):
-                return int(contract_id)
+                return contract_id
 
         raise self.NotFoundError()
 
-    def get_internal_client_id(self, contract_id: int):
+    def get_internal_client_id(self, contract_id: str):
         """Get internal client id in gray database"""
         raw = self.browser.post(f'{self.baseurl}/poisk_test.php',
                                 data={"dogovor": contract_id, "startt": 1})
