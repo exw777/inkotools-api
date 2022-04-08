@@ -143,22 +143,17 @@ class ContractID(str):
         return cls(v)
 
 
-@app.get('/ab/{contract_id}/ips')
-def ab_get_client_ip_list(contract_id: ContractID):
-    data = ab.get_client_ip_list(contract_id)
+@app.get('/ab/{contract_id}/')
+def ab_get_client_by_contract(contract_id: ContractID):
+    data = ab.get_client_data(contract_id)
+    data['billing_accounts'] = ab.get_billing_accounts(contract_id)
     return fmt_result(data)
 
 
-@app.get('/ab/{contract_id}/billing')
-def ab_get_billing_accounts(contract_id: ContractID):
-    data = ab.get_billing_accounts(contract_id)
-    return fmt_result(data)
-
-
-@app.get('/ab/findip/{client_ip}')
+@app.get('/ab/by-ip/{client_ip}/')
 def ab_get_client_by_ip(client_ip: IPv4Address):
-    contract_id = ab.get_client_by_ip(client_ip)
-    return fmt_result({'contract_id': contract_id})
+    contract_id = ab.get_contract_by_ip(client_ip)
+    return ab_get_client_by_contract(contract_id)
 
 
 class ArpSearchModel(BaseModel):

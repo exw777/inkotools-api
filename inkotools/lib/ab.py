@@ -111,7 +111,7 @@ class GRAYDB:
 
         return res
 
-    def get_client_by_ip(self, client_ip: str):
+    def get_contract_by_ip(self, client_ip: str):
         """Find contract with client ip"""
         client_ip = str(client_ip)
         raw = self.browser.post(f'{self.baseurl}/poisk_test.php',
@@ -133,4 +133,45 @@ class GRAYDB:
         if f is None:
             raise self.NotFoundError()
         res = int(f.get('value'))
+        return res
+
+    def get_client_data(self, contract_id: str):
+        """Get client info from gray database"""
+        # check auth
+        self._login()
+        raw = self.browser.get(
+            f'{self.baseurl}/index.php',
+            params={"id_aabon": self.get_internal_client_id(contract_id)})
+        raw = raw.soup
+        res = {'contract_id': contract_id}
+        # matching dict between returning keys and form input names
+        m_dict = {
+            'name': 'fio',
+            'company': 'organizatsiya',
+            'house': 'dom',
+            'room': 'kvartira',
+            'office': 'ofis_tseh',
+            'sw_ip': 'loyalnost',
+            'port': 'port',
+            'cable_length': 'dlina_cab',
+        }
+        # select form with client data (form with input `fio`)
+        d = list(raw.find('input', {'name': 'fio'}).parents)[6]
+        # iterate through the form inputs
+        for key, val in m_dict.items():
+            res[key] = d.find(attrs={'name': val}).get('value')
+        # get street from first (selected) option in select
+        res['street'] = d.find(
+            'select', {'name': 'ulitsa'}).option.get('value').strip()
+        # get contacts without dublicates and empty strings
+        res['contact_list'] = []
+        for i in range(1, 4):
+            c = d.find(attrs={'name': f'cont{i}'}).get('value')
+            if c != '' and c not in res['contact_list']:
+                res['contact_list'].append(c)
+        # comment string from textarea
+        res['comment'] = d.find(attrs={'name': 'primechanie'}).string
+        # search for terminated mark
+        res['terminated'] = bool(
+            raw.find('font', {'color': 'red', 'size': '2px'}))
         return res
