@@ -139,11 +139,12 @@ class GRAYDB:
         """Get client info from gray database"""
         # check auth
         self._login()
+        client_id = self.get_internal_client_id(contract_id)
         raw = self.browser.get(
             f'{self.baseurl}/index.php',
-            params={"id_aabon": self.get_internal_client_id(contract_id)})
+            params={"id_aabon": client_id})
         raw = raw.soup
-        res = {'contract_id': contract_id}
+        res = {'contract_id': contract_id, 'client_id': client_id}
         # matching dict between returning keys and form input names
         m_dict = {
             'name': 'fio',
