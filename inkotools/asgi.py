@@ -286,16 +286,22 @@ class ContractID(str):
 
 
 @app.get('/gdb/{contract_id}/')
-def gdb_get_client_by_contract(contract_id: ContractID):
-    data = gdb.get_client_data(contract_id)
-    data['billing_accounts'] = gdb.get_billing_accounts(contract_id)
+def gdb_get_client_by_contract_full(contract_id: ContractID, style: str = ''):
+    if style == 'short':
+        data = gdb.get_client_data(contract_id)
+    elif style == 'billing':
+        data = gdb.get_billing_accounts(contract_id)
+    # default: full
+    else:
+        data = gdb.get_client_data(contract_id)
+        data['billing_accounts'] = gdb.get_billing_accounts(contract_id)
     return fmt_result(data)
 
 
 @app.get('/gdb/by-ip/{client_ip}/')
-def gdb_get_client_by_ip(client_ip: IPv4Address):
+def gdb_get_client_by_ip_full(client_ip: IPv4Address, style: str = ''):
     contract_id = gdb.get_contract_by_ip(client_ip)
-    return gdb_get_client_by_contract(contract_id)
+    return gdb_get_client_by_contract_full(contract_id, style)
 
 
 @app.get('/ipcalc/{ip}/')
