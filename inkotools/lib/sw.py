@@ -196,6 +196,37 @@ class Switch:
         """Custom exception on wrong creds"""
         pass
 
+    class ModelError(Exception):
+        """Custom exception on unsupported model"""
+        pass
+
+    def _models(supported='', restricted=''):
+        """Supported models decorator"""
+        def decorator(func):
+            def wrapper(self, *args, **kwargs):
+
+                if isinstance(supported, list):
+                    is_supported = True if self.model in supported else False
+                elif supported != '':
+                    is_supported = bool(re.search(supported, self.model))
+                else:
+                    is_supported = True
+
+                if isinstance(restricted, list):
+                    is_restricted = True if self.model in restricted else False
+                elif restricted != '':
+                    is_restricted = bool(re.search(restricted, self.model))
+                else:
+                    is_restricted = False
+
+                if not is_supported or is_restricted:
+                    raise self.ModelError(f'Model {self.model} not supported')
+
+                return func(self, *args, **kwargs)
+
+            return wrapper
+        return decorator
+
     def help(self):
         """List all public methods with args"""
         methods = {}
@@ -263,13 +294,9 @@ class Switch:
                 self.model += '/C1'
         self.log.debug(f'model: {self.model}')
 
+    @_models(restricted=['S5328C-EI-24S'])  # huawey
     def _telnet(self):
         """Connect via telnet and keep connection in returned object"""
-
-        # HARDCODE: huawey is restricted for telnet connection
-        if self.model == 'S5328C-EI-24S':
-            self.log.error(f'huawey is restricted for telnet connection')
-            return None
 
         # check that connection is not established
         if not hasattr(self, '_connection') or not self._connection.isalive():
@@ -611,11 +638,9 @@ class Switch:
                                port=port, state=state, comment=comment)
         return result
 
+    @_models(r'DES-(?!3026)|DGS-(3000|1210)|QSW')
     def get_acl(self, port: int):
         """Get port acl"""
-        if not re.search(r'DES-(?!3026)|DGS-(3000|1210)|QSW', self.model):
-            return {'error': f'Model {self.model} not supported',
-                    'status_code': 422}
         if re.search('QSW', self.model):
             raw = self.send(f'sh am int eth 1/{port}')
             rgx = (r'Interface Ethernet1/(?P<port>\d{1,2})'
@@ -1085,6 +1110,7 @@ class Switch:
                 else:
                     self.delete_vlan_port(port=port, vid=vid)
 
+    @_models(r'DES-(?!3026)|DGS-(3000|1210)|QSW')
     def check_cable(self, port: int):
         """Make cable diagnostic on port
 
@@ -1133,41 +1159,36 @@ class Switch:
                 return None
             return pairs
 
+    @_models(r'DES|DGS')
     def clear_port_counters(self, port: int):
         """Clear counters on port"""
-        if re.search(r'DES|DGS', self.model):
-            result = self.send(f'clear counters ports {port}')
-            if re.search(r'[Ss]uccess', result):
-                return 'Success'
-        else:
-            return {'error': f'Model {self.model} not supported',
-                    'status_code': 422}
+        result = self.send(f'clear counters ports {port}')
+        if re.search(r'[Ss]uccess', result):
+            return 'Success'
 
+    @_models(r'DES|DGS')
     def get_port_counters(self, port: int):
         """Get port counters: errors and traffic in bytes"""
-        if re.search(r'DES|DGS', self.model):
-            # packets
-            raw = self.send(f'show packet ports {port}')
-            rgx = (r'RX Bytes\s+(?P<rx_total>\d+)\s+(?P<rx_speed>\d+)(?s:.*)'
-                   r'TX Bytes\s+(?P<tx_total>\d+)\s+(?P<tx_speed>\d+)')
+        # packets
+        raw = self.send(f'show packet ports {port}')
+        rgx = (r'RX Bytes\s+(?P<rx_total>\d+)\s+(?P<rx_speed>\d+)(?s:.*)'
+               r'TX Bytes\s+(?P<tx_total>\d+)\s+(?P<tx_speed>\d+)')
 
-            res = dict_fmt_int(re.search(rgx, raw).groupdict())
-            # errors
-            raw = self.send(f'show error ports {port}')
-            raw = raw.replace(' - ', ' 0 ')
-            rgx = r'(\w[\w ]*?\w) +(\d+)(?: +(\w[\w ]*\w) +(\d+))?'
-            res['rx_errors'] = []
-            res['tx_errors'] = []
-            for r in re.finditer(rgx, raw):
-                if r[2] and r[2] != '0':
-                    res['rx_errors'].append({'name': r[1], 'count': int(r[2])})
-                if r[4] and r[4] != '0':
-                    res['tx_errors'].append({'name': r[3], 'count': int(r[4])})
-            return res
-        else:
-            return {'error': f'Model {self.model} not supported',
-                    'status_code': 422}
+        res = dict_fmt_int(re.search(rgx, raw).groupdict())
+        # errors
+        raw = self.send(f'show error ports {port}')
+        raw = raw.replace(' - ', ' 0 ')
+        rgx = r'(\w[\w ]*?\w) +(\d+)(?: +(\w[\w ]*\w) +(\d+))?'
+        res['rx_errors'] = []
+        res['tx_errors'] = []
+        for r in re.finditer(rgx, raw):
+            if r[2] and r[2] != '0':
+                res['rx_errors'].append({'name': r[1], 'count': int(r[2])})
+            if r[4] and r[4] != '0':
+                res['tx_errors'].append({'name': r[3], 'count': int(r[4])})
+        return res
 
+    @_models(r'DES|DGS|QSW|^DXS((?!A1).)*$')
     def get_mac_table(self,
                       port: int = None,
                       vid: int = None,
@@ -1184,7 +1205,7 @@ class Switch:
             rgx = (r'(?P<vid>\d+) +\w+ +'
                    r'(?P<mac>(?:\w\w-){5}\w\w) +'
                    r'(?P<port>\d+)')
-        elif re.search(r'QSW|DXS-3600-32S|DXS-1210-12SC/A2', self.model):
+        elif re.search(r'QSW|DXS', self.model):
             iface = '1/' if re.search('QSW', self.model) else '1/0/'
             cmd = 'show mac-address-table'
             if port is not None:
@@ -1196,13 +1217,12 @@ class Switch:
             rgx = (r'(?P<vid>\d+) +'
                    r'(?P<mac>(?:\w\w-){5}\w\w) +'
                    fr'[\w ]+{iface}(?P<port>\d+)')
-        else:
-            return {'error': f'Model {self.model} not supported',
-                    'status_code': 422}
+
         raw = self.send(cmd)
         res = [dict_fmt_int(m.groupdict()) for m in re.finditer(rgx, raw)]
         return res
 
+    @_models(r'DXS-3600|DGS-3627G')
     def get_arp_table(self,
                       ip: str = None,
                       mac: str = None,
@@ -1211,10 +1231,6 @@ class Switch:
         """Get arp table on l3 switches"""
         if ip is None and mac is None and vid is None:
             return []
-
-        if not re.search(r'DXS-3600|DGS-3627G', self.model):
-            return {'error': f'Model {self.model} not supported',
-                    'status_code': 422}
 
         if self.model == 'DXS-3600-32S':
             cmd = 'sh arp '
@@ -1251,21 +1267,17 @@ class Switch:
 
         return res
 
+    @_models('DXS-3600-32S')
     def get_aliases(self):
         """Get list of l3 interfaces ip and vid"""
-        if self.model != 'DXS-3600-32S':
-            return {'error': f'Model {self.model} not supported',
-                    'status_code': 422}
         raw = self.send('sh ip interface brief | exclude down')
         rgx = r'vlan(?P<vid>\d+) +(?P<alias>(?:\d+\.){3}\d+)'
         res = [dict_fmt_int(m.groupdict()) for m in re.finditer(rgx, raw)]
         return res
 
+    @_models(r'DES-(?!3026)|DGS-(3000|1210)')
     def get_mcast_ports(self):
         """Get lists of source and member multicast ports"""
-        if not re.search(r'DES-(?!3026)|DGS-(3000|1210)', self.model):
-            return {'error': f'Model {self.model} not supported',
-                    'status_code': 422}
         raw = self.send('show igmp_snooping multicast_vlan')
         rgx = (r'[^ ](?:Untagged )?Member(?:\(Untagged\))? [Pp]orts +: ?'
                r'(?P<member>[-,0-9]+)?(?s:.*)'
@@ -1274,11 +1286,9 @@ class Switch:
         d = re.search(rgx, raw).groupdict()
         return dict(zip(d.keys(), map(interval_to_list, d.values())))
 
+    @_models(r'DES|DGS')
     def get_port_bandwidth(self, port: int):
         """Get port bandwidth limits"""
-        if not re.search(r'DES|DGS', self.model):
-            return {'error': f'Model {self.model} not supported',
-                    'status_code': 422}
         raw = self.send(f'show bandwidth_control {port}')
         # if no limit - return null
         rgx = (r'\d\ +((?i:no[ _]limit)|(?P<rx>\d+)) +'
@@ -1286,11 +1296,9 @@ class Switch:
         res = re.search(rgx, raw).groupdict()
         return dict_fmt_int(res)
 
+    @_models(r'DES-(?!3026)|DGS-(3000|1210)')
     def get_port_mcast_groups(self, port: int):
         """Get list of multicast groups on port"""
-        if not re.search(r'DES-(?!3026)|DGS-(3000|1210)', self.model):
-            return {'error': f'Model {self.model} not supported',
-                    'status_code': 422}
         if re.search(r'1210|3000|c1', self.model):
             raw = self.send(f'show igmp_snooping group ports {port}')
         else:
@@ -1304,12 +1312,9 @@ class Switch:
                 res.append(m['group'])
         return res
 
+    @_models(r'DES-(?!3026)|DGS-(3000|1210)')
     def get_port_mcast_filters(self, port: int):
         """Get list of allowed multicast groups on port"""
-        if not re.search(r'DES-(?!3026)|DGS-(3000|1210)', self.model):
-            return {'error': f'Model {self.model} not supported',
-                    'status_code': 422}
-
         raw = self.send(f'show limited_multicast_addr ports {port}')
 
         if re.search(r'3028|1210', self.model):

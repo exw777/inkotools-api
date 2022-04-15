@@ -161,7 +161,7 @@ def main():
             else:
                 serve_module('sw')
 
-        except Switch.UnavailableError as e:
+        except (Switch.UnavailableError, Switch.ModelError) as e:
             exit(e)
         except Switch.CredentialsError as e:
             log.error(e)

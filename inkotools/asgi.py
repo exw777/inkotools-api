@@ -129,6 +129,12 @@ async def graydb_404_exception_handler(request, exc):
     return JSONResponse(content={"detail": str(exc)}, status_code=404)
 
 
+@app.exception_handler(Switch.ModelError)
+async def sw_model_exception_handler(request, exc):
+    """Switch wrong model error handler"""
+    return JSONResponse(content={"detail": str(exc)}, status_code=422)
+
+
 class ArpSearchModel(BaseModel):
     ip: Optional[IPv4Address] = None
     gw_ip: Optional[IPv4Address] = None
@@ -431,7 +437,10 @@ def switch_get_port_summary(sw_ip: IPv4Address, port_id: int):
     elif (isinstance(result[0], dict)
           and not result[0]['link']
           and port_id in sw.access_ports):
-        cable = sw.check_cable(port_id)
+        try:
+            cable = sw.check_cable(port_id)
+        except Switch.ModelError:
+            cable = None
         if isinstance(cable, str):
             result[0]['status'] = cable
         else:
