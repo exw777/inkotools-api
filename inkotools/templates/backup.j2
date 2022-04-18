@@ -32,4 +32,6 @@
     copy startup-config tftp://{{ server }}/{{ path }}/{{ ip }}.bin
 {%- elif sw.model == 'DXS-1210-12SC/A2' -%}
     copy running-config tftp://{{ server }}/{{ path }}/{{ ip }}.cfg
+{%- elif sw.model == 'GP3600-04' -%}
+    copy startup-config tftp: {{ server }}
 {%- endif -%}

@@ -134,7 +134,7 @@ class Switch:
                     o = '1'
                 elif re.search('QSW', self.model):
                     o = '3001'
-                elif re.search(r'3600|3526', self.model):
+                elif re.search(r'DXS-3600|3526', self.model):
                     o = '5120'
                 elif re.search(r'DES|DGS|DXS', self.model):
                     o = '5121'
@@ -313,13 +313,14 @@ class Switch:
                     'Failed to parse secrets config') from e
 
             # set prompt
-            if re.search('DXS-1210-12SC/A1', self.model):
+            if re.search(r'DXS-1210-12SC/A1|GP3600', self.model):
                 prompt = '>'
             else:
                 prompt = '#'
 
             # set endline
-            if re.search(r'3627G|3600|3000|3200|3028|3026|3120', self.model):
+            if re.search(r'3627G|DXS-3600|3000|3200|3028|3026|3120',
+                         self.model):
                 self._endline = '\n\r'
             elif re.search(r'1210|QSW|LTP', self.model):
                 self._endline = '\r\n'
@@ -340,6 +341,11 @@ class Switch:
             if tn.expect([prompt, 'ame:|in:']) == 1:
                 raise self.CredentialsError('Wrong login or password!')
             else:
+                # GP3600-04 enable mode
+                if self.model == 'GP3600-04':
+                    tn.send('su'+'\r')
+                    prompt = '#'
+                    tn.expect(prompt)
                 # calculate full prompt-line for further usage
                 self._prompt = tn.before.split()[-1] + prompt
 
@@ -436,6 +442,9 @@ class Switch:
             # Refresh - quit from monitoring
             # [y/n] (ignore case) - saving in cisco cli
             # ]? DXS-3600 confirm tftp backup
+            # TODO: remove hardcode
+            # GP3600 enter backup filename
+            backup_path = f"{COMMON['backup_dir']}/{self.ip}.cfg\r"
             page_exp = {
                 self._prompt: 'break',
                 conf_t: 'break',
@@ -443,6 +452,7 @@ class Switch:
                 'More': ' ',
                 'Refresh': 'q',
                 '(?i)y/n]:': 'y\r',
+                'Destination file name\[startup-config]\?': backup_path,
                 ']\?': '\r',
             }
             cmd_out = ''
@@ -480,7 +490,7 @@ class Switch:
             self.log.error(f'backup error: {e}')
             return None
         end = time() - start
-        r = r' successful|Success|finished|complete|Upload configuration.*Done'
+        r = r'(^|[ :])[Ss]uccess|finished|complete|Upload configuration.*Done'
         if result and re.search(r, result):
             res = f'backup sent in {end:.2f}s'
             self.log.info(res)

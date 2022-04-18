@@ -11,6 +11,8 @@ commit
 save
 {%- elif sw.model == 'GEPON' -%}
 system save all
+{%- elif sw.model == 'GP3600-04' -%}
+write all
 {%- else -%}
 save
 {%- endif -%}
