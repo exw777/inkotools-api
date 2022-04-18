@@ -99,9 +99,11 @@ class Switch:
                                      'show ip snmp'])
                 elif self.model == 'GEPON':
                     raw = self.send('show system infor')
+                elif self.model == 'GP3600-04':
+                    raw = self.send(['sh ver', 'sh conf | inc location'])
 
                 rgx_mac = r'(?P<mac>(?:\w\w[-:]){5}\w\w)'
-                rgx_loc = r'Location *: *\'?(?P<loc>.*\w)?'
+                rgx_loc = r'[Ll]ocation *:? *[\'"]?(?P<loc>.*\w)?'
 
                 self.location = re.search(rgx_loc, raw).group('loc')
                 self.mac = netaddr.EUI(re.search(rgx_mac, raw).group('mac'))
@@ -272,6 +274,7 @@ class Switch:
             're':               r'[A-Z]{1,3}-?[0-9]{1,4}[^ ]*',
             'GEPON':            'EPON System',
             'S5328C-EI-24S':    'Login authentication',
+            'GP3600-04':        'User Access Verification',
             'QSW-2800-28T-AC':  'in:',
             'unknown':          pexpect.TIMEOUT}
         m = tn.expect(list(matches.values()))
