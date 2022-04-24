@@ -108,7 +108,7 @@ def validate_port(sw: Switch, port_id: int):
     ports_range = sw.access_ports + sw.transit_ports
     if len(ports_range) == 0:
         raise HTTPException(
-            status_code=422, detail=f'{sw.model} not supported')
+            status_code=422, detail='no supported ports found')
     if port_id not in ports_range:
         raise HTTPException(
             status_code=422, detail=f'port {port_id} is out of range')
@@ -394,9 +394,6 @@ def switch_get_summary(sw_ip: IPv4Address):
 def switch_save(sw_ip: IPv4Address):
     sw = get_sw_instance(sw_ip)
     result = sw.save()
-    if result is None:
-        raise HTTPException(
-            status_code=500, detail=f'failed to save {sw_ip}')
     return fmt_result(result)
 
 
@@ -404,9 +401,6 @@ def switch_save(sw_ip: IPv4Address):
 def switch_backup(sw_ip: IPv4Address):
     sw = get_sw_instance(sw_ip)
     result = sw.backup()
-    if result is None:
-        raise HTTPException(
-            status_code=500, detail=f'failed to backup {sw_ip}')
     return fmt_result(result)
 
 
@@ -437,12 +431,10 @@ def switch_get_port_summary(sw_ip: IPv4Address, port_id: int):
     sw = get_sw_instance(sw_ip)
     validate_port(sw, port_id)
     result = sw.get_port_state(port_id)
-    if result is None:
-        raise HTTPException(
-            status_code=500, detail=f'failed to get port summary')
-    elif (isinstance(result[0], dict)
-          and not result[0]['link']
-          and port_id in sw.access_ports):
+    # add cable diagnostics for access ports without link
+    if (isinstance(result[0], dict)
+        and not result[0]['link']
+            and port_id in sw.access_ports):
         try:
             cable = sw.check_cable(port_id)
         except Switch.ModelError:

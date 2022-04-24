@@ -332,6 +332,7 @@ class Switch:
             else:
                 self._endline = '\r\n'
 
+            self.log.debug('spawning telnet...')
             # TODO: different timeout for each model
             tn = pexpect.spawn(f'telnet {self.ip}',
                                timeout=120, encoding="utf-8")
@@ -366,25 +367,25 @@ class Switch:
                 self._prompt = tn.before.split()[-1] + prompt
 
             self._connection = tn
-            self.log.debug(f'new telnet connection')
+            self.log.debug('telnet connection established')
         else:
-            self.log.debug(f'telnet already connected')
+            self.log.debug('telnet already connected')
         return self._connection
 
     def _close_telnet(self):
         """Close telnet connection"""
         if hasattr(self, '_connection'):
             self._connection.close()
-            self.log.debug(f'telnet connection closed')
+            self.log.debug('telnet connection closed')
 
     def interact(self):
         """Interact with switch via telnet"""
         tn = self._telnet()
-        if not tn:
-            self.log.debug('telnet object is empty')
-            return None
+        # send empty line to immediately display standard promt
+        tn.send('\r')
         tn.interact()
 
+    # REFACTORING NEEDED
     def send(self, commands=[], template=None, **kwargs):
         """Send commands to switch
 
@@ -396,9 +397,11 @@ class Switch:
         template: Load commands from j2 file of templates directory.
                   If specified, commands argument is ignored.
 
-        Returns: Result of running commands as plain text.
-        """
+        kwargs:   Arguments passing into template
 
+        Returns:  Result of running commands as plain text.
+
+        """
         if template:
             self.log.debug(f'template: {template}')
             self.log.debug(f'kwargs: {kwargs}')
@@ -412,8 +415,8 @@ class Switch:
 
         # exit on empty commands
         if not commands:
-            self.log.warning(f'empty commands list')
-            return None
+            self.log.warning('empty commands list')
+            return ''
 
         self.log.debug(f'raw commands: {commands}')
 
@@ -424,9 +427,6 @@ class Switch:
             self.log.debug(f'converted commands: {commands}')
 
         tn = self._telnet()
-        if not tn:
-            self.log.debug('telnet object is empty')
-            return None
 
         output = ''
         for cmd in commands:
@@ -491,54 +491,50 @@ class Switch:
         self._close_telnet()
         self.log.debug(f'switch object destroyed')
 
+    @_models(restricted=['S5328C-EI-24S', 'GEPON'])
     def backup(self):
         """Backup via tftp
 
-        Returns: True if file transfer is successful,
-                 raw result otherwise.
+        Returns: string result.
         """
         server = f"192.168.{self.ip.words[2]}.{COMMON['backup_host']}"
         path = COMMON['backup_dir']
         start = time()
-        try:
-            result = self.send(template='backup.j2', server=server, path=path)
-        except Exception as e:
-            self.log.error(f'backup error: {e}')
-            return None
+        result = self.send(template='backup.j2', server=server, path=path)
         end = time() - start
         r = r'(^|[ :])[Ss]uccess|finished|complete|Upload configuration.*Done'
-        if result and re.search(r, result):
+        if re.search(r, result):
             res = f'backup sent in {end:.2f}s'
             self.log.info(res)
-            return res
         else:
-            self.log.error(f'backup result is: {result}')
-            return None
+            res = {'error': f'backup failed: {result}'}
+            self.log.error(result)
+        return res
 
+    @_models(restricted=['S5328C-EI-24S'])
     def save(self):
-        """Save config"""
+        """Save config
+
+        Returns: string result.
+        """
         start = time()
-        try:
-            result = self.send(template='save.j2')
-        except Exception as e:
-            self.log.error(f'saving error: {e}')
-            return None
+        result = self.send(template='save.j2')
         end = time() - start
         r = r'Done|Success|OK| success'
         if result and re.search(r, result):
             res = f'saved in {end:.2f}s'
             self.log.info(res)
-            return res
         else:
-            self.log.error(f'wrong saving result: {result}')
-            return None
+            res = {'error': f'save failed: {result}'}
+            self.log.error(result)
+        return res
 
+    @_models(r'DES|DGS|QSW|^DXS((?!A1).)*$')
     def get_port_state(self, port: int):
         """Get port state
 
         Returns:
             list of dicts with len 1 for simple ports and 2 for combo
-            None - on error
 
         Dict:
             port: int           - port number
@@ -549,86 +545,99 @@ class Switch:
             status: str         - link speed
             learning: bool      - mac learning state
             autodowngrade: bool - speed conf state on DGS switches
-
+            desc: str           - port description
         """
-        port = int(port)
-        if not port in (self.access_ports + self.transit_ports):
-            self.log.error(f'port {port} out of range')
-            return None
 
-        try:
-            raw = self.send(template='port_state.j2', port=port)
-        except Exception as e:
-            self.log.error(f'port {port} failed: {e}')
-            return None
-        if not raw:
-            return None
+        if re.search('QSW', self.model):
+            raw = self.send(f'sh int eth 1/{port}')
+            rgx = (
+                r'Ethernet1/(?P<port>\d+) is (?P<state>[\w ]+)'
+                r', line protocol is (?P<link>\w+)(?s:.*)'
+                r'alias name is (?P<desc>[\(\)\w ]+),(?s:.*)'
+                r'\s (?P<speed>[\w ,:-]+)\s+Flow'
+            )
+            res = re.search(rgx, raw).groupdict()
+            # some magic to convert values in same format as dlink
+            res['state'] = False if re.search(
+                'admin', res['state']) else True
+            res['link'] = str_to_bool(res['link'])
+            if res['desc'] == '(null)':
+                res['desc'] = None
+            r = r'(?:Negotiation|Force) (\w+)'
+            res['status'] = '/'.join(reversed(re.findall(r, res['speed'])))
+            if re.search('Auto', res['speed']):
+                res['speed'] = 'Auto'
+            else:
+                res['speed'] = res['status']
+            if not res['link']:
+                res['status'] = None
+            res['port'] = int(res['port'])
+            # workaround for frontend alarm
+            res['learning'] = True
 
-        try:
-            if re.search('QSW', self.model):
-                # q-tech
-                rgx = (
-                    r'Ethernet1/(?P<port>\d+) is (?P<state>[\w ]+)'
-                    r', line protocol is (?P<link>\w+)(?s:.*)'
-                    r'alias name is (?P<desc>[\(\)\w ]+),(?s:.*)'
-                    r'\s (?P<speed>[\w ,:-]+)\s+Flow'
-                )
-                res = re.search(rgx, raw).groupdict()
-                # some magic to convert values in same format as dlink
-                res['state'] = False if re.search(
-                    'admin', res['state']) else True
-                res['link'] = str_to_bool(res['link'])
-                if res['desc'] == '(null)':
-                    res['desc'] = None
-                r = r'(?:Negotiation|Force) (\w+)'
-                res['status'] = '/'.join(reversed(re.findall(r, res['speed'])))
-                if re.search('Auto', res['speed']):
-                    res['speed'] = 'Auto'
+            result = [res]
+
+        elif re.search('DES|DGS', self.model):
+            raw = self.send(f'sh ports {port} desc')
+            rgx = (
+                r'(?P<port>\d{1,2})(?:\s*\((?P<type>C|F)\))?\s+'
+                r'(?P<state>Enabled|Disabled)\s+'
+                r'(?P<speed>Auto|10+\w/(?:Full|Half))/\w+\s+'
+                r'(?P<link>Link ?Down|10+\w/(?:Full|Half))(?:/\w+)?\s+'
+                r'(?P<learning>Enabled|Disabled)\s+'
+                r'(?P<autodowngrade>Enabled|Disabled|-)?'
+                r'(?s:.*?)Desc[a-z]*: +(?P<desc>.*[^\s])?'
+            )
+            result = [m.groupdict() for m in re.finditer(rgx, raw)]
+            # convert values
+            for res in result:
+                if re.search('3000|DGS-1210', self.model):
+                    res['autodowngrade'] = str_to_bool(
+                        res['autodowngrade'])
                 else:
-                    res['speed'] = res['status']
-                if not res['link']:
+                    # on 3526 this field is trap
+                    res['autodowngrade'] = None
+                if re.search(r'(?i:down)', res['link']):
+                    res['link'] = False
                     res['status'] = None
+                else:
+                    res['status'] = res['link']
+                    res['link'] = True
+                res['state'] = str_to_bool(res['state'])
+                res['learning'] = str_to_bool(res['learning'])
                 res['port'] = int(res['port'])
-                # workaround for frontend alarm
-                res['learning'] = True
 
-                result = [res]
+        elif re.search('DXS', self.model):
+            raw = self.send(f'sh int eth 1/0/{port}')
+            rgx = (
+                r'Eth1/0/(?P<port>\d+) is (?P<state>[\w]+?)'
+                r',? link status is (?P<link>\w+)(?s:.*)'
+                r'description: (?P<desc>.*)(?s:.*)'
+                r'MAC(?s:.*?)(?:\r|\n) *(?P<speed>[\w\-\/ \,]+)(?s:.*)'
+                r'flow-control(?s:.*?)(?:\r|\n) *(?P<status>[\w\-\/ \,]+)'
+            )
+            res = re.search(rgx, raw).groupdict()
+            if re.search(r'(?i:down)', res['status']):
+                res['status'] = None
+            else:
+                # convert 'Full-duplex, 10Gb/s' -> '10G/Full'
+                res['status'] = re.sub(r'(\w+)-duplex, (\d+\w)b/s',
+                                       r'\2/\1', res['status'])
+            # convert 'Auto-duplex, 10G, auto-mdix' -> '10G/Auto'
+            duplex, speed = re.sub(r'-\w+', '', res['speed']).split(', ')[:2]
+            if re.match(r'\d+$', speed):
+                speed += 'M'
+            if duplex.lower() == speed.lower():
+                res['speed'] = 'Auto'
+            else:
+                res['speed'] = f'{speed}/{duplex}'
+            res['link'] = str_to_bool(res['link'])
+            res['state'] = str_to_bool(res['state'])
+            res['port'] = int(res['port'])
+            res['learning'] = True
+            result = [res]
 
-            elif re.search('DES|DGS', self.model):
-                # d-link
-                rgx = (
-                    r'(?P<port>\d{1,2})(?:\s*\((?P<type>C|F)\))?\s+'
-                    r'(?P<state>Enabled|Disabled)\s+'
-                    r'(?P<speed>Auto|10+\w/(?:Full|Half))/\w+\s+'
-                    r'(?P<link>Link ?Down|10+\w/(?:Full|Half))(?:/\w+)?\s+'
-                    r'(?P<learning>Enabled|Disabled)\s+'
-                    r'(?P<autodowngrade>Enabled|Disabled|-)?'
-                    r'(?s:.*?)Desc[a-z]*: +(?P<desc>.*[^\s])?'
-                )
-                result = [m.groupdict() for m in re.finditer(rgx, raw)]
-                # convert values
-                for res in result:
-                    if re.search('3000|DGS-1210', self.model):
-                        res['autodowngrade'] = str_to_bool(
-                            res['autodowngrade'])
-                    else:
-                        # on 3526 this field is trap
-                        res['autodowngrade'] = None
-                    if re.search(r'(?i:down)', res['link']):
-                        res['link'] = False
-                        res['status'] = None
-                    else:
-                        res['status'] = res['link']
-                        res['link'] = True
-                    res['state'] = str_to_bool(res['state'])
-                    res['learning'] = str_to_bool(res['learning'])
-                    res['port'] = int(res['port'])
-
-        except Exception as e:
-            self.log.error(f'port {port} - regex parse failed: {e}')
-            return raw
-        else:
-            return result
+        return result
 
     def get_ports_state(self, ports: list = []):
         """Get multiple ports state
