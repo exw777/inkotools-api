@@ -20,8 +20,18 @@ git_author = COMMON['git_author']
 
 
 def backup_and_save(sw):
-    sw.backup()
-    sw.save()
+    try:
+        sw.backup()
+    except sw.ModelError:
+        pass
+    except Exception as e:
+        sw.log.error(f'Backup exception: {e}')
+    try:
+        sw.save()
+    except sw.ModelError:
+        pass
+    except Exception as e:
+        sw.log.error(f'Saving exception: {e}')
 
 
 def main():
