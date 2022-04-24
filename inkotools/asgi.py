@@ -135,6 +135,12 @@ async def sw_model_exception_handler(request, exc):
     return JSONResponse(content={"detail": str(exc)}, status_code=422)
 
 
+@app.exception_handler(Switch.UnavailableError)
+async def sw_unavailable_exception_handler(request, exc):
+    """Switch unavailable error handler"""
+    return JSONResponse(content={"detail": str(exc)}, status_code=503)
+
+
 class ArpSearchModel(BaseModel):
     ip: Optional[IPv4Address] = None
     gw_ip: Optional[IPv4Address] = None

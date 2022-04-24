@@ -336,12 +336,25 @@ class Switch:
             tn = pexpect.spawn(f'telnet {self.ip}',
                                timeout=120, encoding="utf-8")
 
-            tn.expect('ame:|in:')
+            login_promt = 'ame:|in:'
+            fail_matches = {
+                'refused': pexpect.EOF,
+                'timed out': pexpect.TIMEOUT,
+            }
+            fail = tn.expect([login_promt] + list(fail_matches.values()))
+
+            # check failed telnet connection
+            if fail != 0:
+                msg = f'Connection {list(fail_matches.keys())[fail-1]}'
+                self.log.error(msg)
+                raise self.UnavailableError(msg)
+
+            # try to login
             tn.send(login+'\r')
             tn.expect('ord:')
             tn.send(password+'\r')
             # asking login again - wrong password
-            if tn.expect([prompt, 'ame:|in:']) == 1:
+            if tn.expect([prompt, login_promt]) == 1:
                 raise self.CredentialsError('Wrong login or password!')
             else:
                 # GP3600-04 enable mode
