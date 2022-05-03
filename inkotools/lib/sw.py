@@ -1212,26 +1212,65 @@ class Switch:
         if re.search(r'[Ss]uccess', result):
             return 'Success'
 
-    @_models(r'DES|DGS')
+    @_models(r'DES|DGS|QSW|^DXS((?!A1).)*$')
     def get_port_counters(self, port: int):
         """Get port counters: errors and traffic in bytes"""
-        # packets
-        raw = self.send(f'show packet ports {port}')
-        rgx = (r'RX Bytes\s+(?P<rx_total>\d+)\s+(?P<rx_speed>\d+)(?s:.*)'
-               r'TX Bytes\s+(?P<tx_total>\d+)\s+(?P<tx_speed>\d+)')
 
-        res = dict_fmt_int(re.search(rgx, raw).groupdict())
-        # errors
-        raw = self.send(f'show error ports {port}')
-        raw = raw.replace(' - ', ' 0 ')
-        rgx = r'(\w[\w ]*?\w) +(\d+)(?: +(\w[\w ]*\w) +(\d+))?'
-        res['rx_errors'] = []
-        res['tx_errors'] = []
-        for r in re.finditer(rgx, raw):
-            if r[2] and r[2] != '0':
-                res['rx_errors'].append({'name': r[1], 'count': int(r[2])})
-            if r[4] and r[4] != '0':
-                res['tx_errors'].append({'name': r[3], 'count': int(r[4])})
+        # d-link cli
+        if re.search(r'DES|DGS', self.model):
+            # packets
+            raw = self.send(f'show packet ports {port}')
+            rgx = (r'RX Bytes\s+(?P<rx_total>\d+)\s+(?P<rx_speed>\d+)(?s:.*)'
+                   r'TX Bytes\s+(?P<tx_total>\d+)\s+(?P<tx_speed>\d+)')
+
+            res = dict_fmt_int(re.search(rgx, raw).groupdict())
+            # errors
+            raw = self.send(f'show error ports {port}')
+            raw = raw.replace(' - ', ' 0 ')
+            rgx = r'(\w[\w ]*?\w) +(\d+)(?: +(\w[\w ]*\w) +(\d+))?'
+            res['rx_errors'] = []
+            res['tx_errors'] = []
+            for r in re.finditer(rgx, raw):
+                if r[2] and r[2] != '0':
+                    res['rx_errors'].append({'name': r[1],
+                                             'count': int(r[2])})
+                if r[4] and r[4] != '0':
+                    res['tx_errors'].append({'name': r[3],
+                                             'count': int(r[4])})
+
+        # cisco cli
+        else:
+            if re.search('QSW', self.model):
+                raw = self.send(f'show int eth 1/{port}')
+                rgx = (r'second input rate (?P<rx_speed>\d+) bits/sec(?s:.*)'
+                       r'second output rate (?P<tx_speed>\d+) bits/sec(?s:.*)'
+                       r'Input(?s:.*) (?P<rx_total>\d+) bytes(?s:.*)'
+                       r'(?P<rx_errors>\d+ input(?s:.*))'
+                       r'Output(?s:.*) (?P<tx_total>\d+) bytes(?s:.*)'
+                       r'(?P<tx_errors>\d+ output(?s:.*))')
+                rgx_err = r'(?P<count>\d+) (?P<name>[\w ]+),?(?:,\s+)?'
+            # TODO: try with DXS-1210-12SC/A2 (no way to test yet)
+            elif re.search('DXS', self.model):
+                raw = self.send(f'show int eth 1/0/{port}')
+                rgx = (r'RX rate: (?P<rx_speed>\d+) \w+/sec, '
+                       r'TX rate: (?P<tx_speed>\d+) \w+/sec\s+'
+                       r'RX bytes: (?P<rx_total>\d+), '
+                       r'TX bytes: (?P<tx_total>\d+)(?s:.*)'
+                       r'(?P<rx_errors>RX CRC(?s:.*))'
+                       r'(?P<tx_errors>TX CRC(?s:.*))')
+                rgx_err = r'\wX (?P<name>[\w ]+): (?P<count>\d+),?(?:,\s+)?'
+
+            res = dict_fmt_int(re.search(rgx, raw).groupdict())
+            # format errors
+            for key in ['rx_errors', 'tx_errors']:
+                res[key] = [
+                    dict_fmt_int(item.groupdict()) for item in re.finditer(
+                        rgx_err, res[key]) if item['count'] != '0']
+            # convert bits to bytes on DXS-3600
+            if re.search('3600', self.model):
+                for key in ['rx_speed', 'tx_speed']:
+                    res[key] /= 8
+
         return res
 
     @_models(r'DES|DGS|QSW|^DXS((?!A1).)*$')
