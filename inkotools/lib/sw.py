@@ -553,7 +553,8 @@ class Switch:
             rgx = (
                 r'Ethernet1/(?P<port>\d+) is (?P<state>[\w ]+)'
                 r', line protocol is (?P<link>\w+)(?s:.*)'
-                r'alias name is (?P<desc>[\(\)\w ]+),(?s:.*)'
+                r'alias name is (?P<desc>.*[^\s]),(?s:.*)'
+                r'Hardware is (?P<type>[-\w]+(, active is \w+)?),(?s:.*)'
                 r'\s (?P<speed>[\w ,:-]+)\s+Flow'
             )
             res = re.search(rgx, raw).groupdict()
@@ -563,6 +564,7 @@ class Switch:
             res['link'] = str_to_bool(res['link'])
             if res['desc'] == '(null)':
                 res['desc'] = None
+            res['type'] = 'F' if re.search('Fiber', res['type']) else 'C'
             r = r'(?:Negotiation|Force) (\w+)'
             res['status'] = '/'.join(reversed(re.findall(r, res['speed'])))
             if re.search('Auto', res['speed']):
@@ -577,7 +579,7 @@ class Switch:
 
             result = [res]
 
-        elif re.search('DES|DGS', self.model):
+        elif re.search(r'DES|DGS', self.model):
             raw = self.send(f'sh ports {port} desc')
             rgx = (
                 r'(?P<port>\d{1,2})(?:\s*\((?P<type>C|F)\))?\s+'
@@ -606,6 +608,10 @@ class Switch:
                 res['state'] = str_to_bool(res['state'])
                 res['learning'] = str_to_bool(res['learning'])
                 res['port'] = int(res['port'])
+                # set default fiber/copper type depending on the model
+                if res['type'] is None:
+                    res['type'] = 'F' if re.search(
+                        r'3627|3120|28F', self.model) else 'C'
 
         elif re.search('DXS', self.model):
             raw = self.send(f'sh int eth 1/0/{port}')
@@ -635,6 +641,11 @@ class Switch:
             res['state'] = str_to_bool(res['state'])
             res['port'] = int(res['port'])
             res['learning'] = True
+            # DXS-1210-12SC/A2 has combo ports, but no way to test yet
+            # other DXS models have only fiber ports
+            res['type'] = 'F'
+            if res['desc'] == '':
+                res['desc'] = None
             result = [res]
 
         return result
