@@ -431,18 +431,34 @@ def switch_get_port_summary(sw_ip: IPv4Address, port_id: int):
     sw = get_sw_instance(sw_ip)
     validate_port(sw, port_id)
     result = sw.get_port_state(port_id)
-    # add cable diagnostics for access ports without link
-    if (isinstance(result[0], dict)
-        and not result[0]['link']
-            and port_id in sw.access_ports):
-        try:
-            cable = sw.check_cable(port_id)
-        except Switch.ModelError:
-            cable = None
-        if isinstance(cable, str):
-            result[0]['status'] = cable
-        else:
-            result[0]['cable'] = cable
+    for port in result:
+        # add cable diagnostics for copper ports without link
+        if port['type'] == 'C' and not port['link']:
+            try:
+                cable = sw.check_cable(port_id)
+            except Switch.ModelError:
+                cable = None
+            if isinstance(cable, str):
+                # 'no cable' string
+                port['status'] = cable
+            else:
+                port['cable'] = cable
+        # add ddm transceiver info for fiber ports
+        elif port['type'] == 'F':
+            try:
+                ddm = sw.get_port_ddm(port_id)
+                # remove port item (duplicated in common summary)
+                ddm.pop('port')
+                # clear object if all values are None
+                if set(ddm.values()) == {None}:
+                    ddm = None
+                port['ddm'] = ddm
+            except Switch.ModelError:
+                pass
+
+    # if (isinstance(result[0], dict)
+    #     and not result[0]['link']
+    #         and port_id in sw.access_ports):
 
     return fmt_result(result)
 
@@ -452,6 +468,13 @@ def switch_get_port_acl(sw_ip: IPv4Address, port_id: int):
     sw = get_sw_instance(sw_ip)
     validate_port(sw, port_id)
     return fmt_result(sw.get_acl(port_id))
+
+
+@app.get('/sw/{sw_ip}/ports/{port_id}/ddm')
+def switch_get_port_ddm(sw_ip: IPv4Address, port_id: int):
+    sw = get_sw_instance(sw_ip)
+    validate_port(sw, port_id)
+    return fmt_result(sw.get_port_ddm(port_id))
 
 
 @app.get('/sw/{sw_ip}/ports/{port_id}/vlan')

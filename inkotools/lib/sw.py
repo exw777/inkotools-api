@@ -333,9 +333,9 @@ class Switch:
                 self._endline = '\r\n'
 
             self.log.debug('spawning telnet...')
-            # TODO: different timeout for each model
-            tn = pexpect.spawn(f'telnet {self.ip}',
-                               timeout=120, encoding="utf-8")
+            # codec_errors='ignore' - ignore non-unicode symbols
+            tn = pexpect.spawn(f'telnet {self.ip}', timeout=120,
+                               encoding='utf-8', codec_errors='ignore')
 
             login_promt = 'ame:|in:'
             fail_matches = {
@@ -610,8 +610,10 @@ class Switch:
                 res['port'] = int(res['port'])
                 # set default fiber/copper type depending on the model
                 if res['type'] is None:
-                    res['type'] = 'F' if re.search(
-                        r'3627|3120|28F', self.model) else 'C'
+                    if re.search(r'3627|3120|28F', self.model):
+                        res['type'] = 'F'
+                    else:
+                        res['type'] = 'F' if int(port) > 24 else 'C'
 
         elif re.search('DXS', self.model):
             raw = self.send(f'sh int eth 1/0/{port}')
@@ -1161,9 +1163,7 @@ class Switch:
         """Make cable diagnostic on port
 
         if len is not available, returns int 666 ;)"""
-        if not port in self.access_ports:
-            self.log.error(f'port {port} is out of access ports range')
-            return None
+
         # get raw result
         if re.search('QSW', self.model):
             raw = self.send(f'virtual-cable-test interface ethernet 1/{port}')
@@ -1204,6 +1204,42 @@ class Switch:
                     return state[0]
                 return None
             return pairs
+
+    @_models(r'DES|DGS|QSW|DXS-3600')
+    def get_port_ddm(self, port: int):
+        """Get transceiver ddm info"""
+
+        if re.search(r'DES|DGS', self.model):
+            raw = self.send(f'show ddm ports {port} status')
+            rgx = r'[^-](-|[-+]?[.\d]+)\s'
+            keys = ['port', 'temperature', 'voltage', 'bias_current',
+                            'tx_power', 'rx_power']
+            values = [float(item) if item != '-' else None
+                      for item in re.findall(rgx, raw)]
+
+        elif re.search(r'QSW', self.model):
+            raw = self.send(f'show transceiver interface eth 1/{port}')
+            rgx = r'[^-](N/A|[-+]?[.\d]+)(?:\s|$)'
+            keys = ['port', 'temperature', 'voltage', 'bias_current',
+                            'rx_power', 'tx_power']
+            values = [float(item) if item != 'N/A' else None
+                      for item in re.findall(rgx, raw)]
+
+        elif self.model == 'DXS-3600-32S':
+            raw = self.send(f'sh int eth 1/0/{port} transceiver')
+            rgx = r'(-?[.\d]+)\s'
+            keys = ['port', 'temperature', 'voltage', 'bias_current',
+                            'tx_power', 'rx_power']
+            # last two values - power in dbm
+            values = list(map(float, re.findall(rgx, raw)[:-2]))
+
+        if len(keys) == len(values):
+            res = dict(zip(keys, values))
+        else:
+            res = dict.fromkeys(keys)
+            res['port'] = port
+
+        return res
 
     @_models(r'DES|DGS')
     def clear_port_counters(self, port: int):
