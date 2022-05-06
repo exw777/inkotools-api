@@ -1211,7 +1211,7 @@ class Switch:
 
         if re.search(r'DES|DGS', self.model):
             raw = self.send(f'show ddm ports {port} status')
-            rgx = r'[^-](-|[-+]?[.\d]+)\s'
+            rgx = r'[^-](-|[-+]?\d+[-+e.\d]*)\s'
             keys = ['port', 'temperature', 'voltage', 'bias_current',
                             'tx_power', 'rx_power']
             values = [float(item) if item != '-' else None
@@ -1219,7 +1219,7 @@ class Switch:
 
         elif re.search(r'QSW', self.model):
             raw = self.send(f'show transceiver interface eth 1/{port}')
-            rgx = r'[^-](N/A|[-+]?[.\d]+)(?:\s|$)'
+            rgx = r'[^-](N/A|[-+]?\d+[-+e.\d]*)(?:\s|$)'
             keys = ['port', 'temperature', 'voltage', 'bias_current',
                             'rx_power', 'tx_power']
             values = [float(item) if item != 'N/A' else None
@@ -1227,7 +1227,7 @@ class Switch:
 
         elif self.model == 'DXS-3600-32S':
             raw = self.send(f'sh int eth 1/0/{port} transceiver')
-            rgx = r'(-?[.\d]+)\s'
+            rgx = r'(-?\d+[-+e.\d]*)\s'
             keys = ['port', 'temperature', 'voltage', 'bias_current',
                             'tx_power', 'rx_power']
             # last two values - power in dbm
