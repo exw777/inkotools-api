@@ -118,8 +118,7 @@ def validate_port(sw: Switch, port_id: int):
 async def validation_exception_handler(request, exc):
     """Override validation errors formatting"""
     detail = ', '.join(
-        map(lambda err: ', '.join(map(str, err["loc"]))+' - '
-            + err["msg"], exc.errors()))
+        map(lambda err: err["loc"][-1] + ' - ' + err["msg"], exc.errors()))
     return JSONResponse(content={"detail": detail}, status_code=422)
 
 
@@ -455,10 +454,6 @@ def switch_get_port_summary(sw_ip: IPv4Address, port_id: int):
                 port['ddm'] = ddm
             except Switch.ModelError:
                 pass
-
-    # if (isinstance(result[0], dict)
-    #     and not result[0]['link']
-    #         and port_id in sw.access_ports):
 
     return fmt_result(result)
 
