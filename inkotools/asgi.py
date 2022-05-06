@@ -296,6 +296,13 @@ class ContractID(str):
         return cls(v)
 
 
+@app.get('/gdb/tickets')
+def gdb_get_tickets():
+    data = gdb.get_tickets()
+    meta = {"entries": len(data)}
+    return fmt_result(data, meta)
+
+
 @app.get('/gdb/{contract_id}/')
 def gdb_get_client_by_contract_full(contract_id: ContractID, style: str = ''):
     if style == 'short':

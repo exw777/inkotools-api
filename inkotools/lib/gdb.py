@@ -3,6 +3,8 @@
 
 # internal imports
 import logging
+import re
+from datetime import datetime
 
 # external imports
 import mechanicalsoup
@@ -183,3 +185,38 @@ class GRAYDB:
         res['terminated'] = bool(
             raw.find('font', {'color': 'red', 'size': '2px'}))
         return res
+
+    @_check_auth
+    def get_tickets(self):
+        """Get list of tickets"""
+
+        tickets = []
+        keys = ['ticket_id', 'contract_id', 'name', 'issue', 'address',
+                'contacts', 'date', 'created_by', 'status']
+        raw = self.browser.get(f'{self.baseurl}/zayavki.php')
+        raw = raw.soup
+        for row in raw.tbody.find_all('tr'):
+            values = list(map(lambda x: re.sub(
+                r' +', ' ', x.text.strip()), row.find_all('td')))
+            # normal user tickets
+            if len(values) == 11:
+                values = values[0:9]
+            # boss tickets
+            elif len(values) == 13:
+                values = values[1:10]
+            # error
+            else:
+                self.log.error(f'Wrong ticket structure: {values}')
+                continue
+            ticket = dict(zip(keys, values))
+
+            # strip '№ ' from ticket id
+            ticket['ticket_id'] = int(ticket['ticket_id'][2:])
+            # convert contacts to list
+            ticket['contacts'] = ticket['contacts'].split()
+            # convert str to date
+            ticket['date'] = datetime.strptime(
+                ticket['date'], '%d-%m-%y').date()
+            tickets.append(ticket)
+
+        return tickets
