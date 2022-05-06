@@ -69,6 +69,14 @@ class GRAYDB:
         else:
             log.debug('Already logged in')
 
+    def _check_auth(func):
+        """Check auth decorator"""
+
+        def wrapper(self, *args, **kwargs):
+            self._login()
+            return func(self, *args, **kwargs)
+        return wrapper
+
     def get_client_ip_list(self, contract_id: str):
         """Get list of client ips from billing"""
         inet = self.get_billing_accounts(contract_id)['internet']
@@ -135,10 +143,9 @@ class GRAYDB:
         res = int(f.get('value'))
         return res
 
+    @_check_auth
     def get_client_data(self, contract_id: str):
         """Get client info from gray database"""
-        # check auth
-        self._login()
         client_id = self.get_internal_client_id(contract_id)
         raw = self.browser.get(
             f'{self.baseurl}/index.php',
