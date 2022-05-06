@@ -26,14 +26,14 @@ log = logging.getLogger(__name__)
 # init db
 db = DB(COMMON['DB_FILE'])
 
-# init graydb
-gdb = GRAYDB(COMMON['GRAYDB_URL'], SECRETS['gray_database'])
-
 # init fastapi
 app = FastAPI()
 
 # init switches storage
 SWITCHES = {}
+
+# init gdb users storage
+GDB_USERS = {}
 
 
 def get_sw_instance(sw_ip):
@@ -82,6 +82,20 @@ def get_sw_instance(sw_ip):
         return sw
 
 
+def get_gdb_instance(creds):
+    user = creds['login']
+    log.debug(f'creds: {creds}')
+    if user in GDB_USERS:
+        log.debug(f'Attaching to existing gdb instance for {user}')
+    else:
+        log.debug(f'New gdb instance for {user}')
+        # workaround for optional password field
+        if creds['password'] is None:
+            raise GRAYDB.CredentialsError('Missing password for first auth')
+        GDB_USERS[user] = GRAYDB(COMMON['GRAYDB_URL'], creds)
+    return GDB_USERS[user]
+
+
 def fmt_result(data, meta=None):
     """Format value according to internal api standart"""
     if isinstance(data, str):
@@ -126,6 +140,12 @@ async def validation_exception_handler(request, exc):
 async def graydb_404_exception_handler(request, exc):
     """Gray database not found error handler"""
     return JSONResponse(content={"detail": str(exc)}, status_code=404)
+
+
+@app.exception_handler(GRAYDB.CredentialsError)
+async def graydb_creds_exception_handler(request, exc):
+    """Gray database credentials error handler"""
+    return JSONResponse(content={"detail": str(exc)}, status_code=401)
 
 
 @app.exception_handler(Switch.ModelError)
@@ -296,8 +316,14 @@ class ContractID(str):
         return cls(v)
 
 
-@app.get('/gdb/tickets')
-def gdb_get_tickets():
+class CredsModel(BaseModel):
+    login: str
+    password: Optional[str]
+
+
+@app.post('/gdb/tickets')
+def gdb_tickets(creds: CredsModel):
+    gdb = get_gdb_instance(dict(creds))
     data = gdb.get_tickets()
     meta = {"entries": len(data)}
     return fmt_result(data, meta)
@@ -305,6 +331,7 @@ def gdb_get_tickets():
 
 @app.get('/gdb/{contract_id}/')
 def gdb_get_client_by_contract_full(contract_id: ContractID, style: str = ''):
+    gdb = get_gdb_instance(SECRETS['gray_database'])
     if style == 'short':
         data = gdb.get_client_data(contract_id)
     elif style == 'billing':
@@ -318,6 +345,7 @@ def gdb_get_client_by_contract_full(contract_id: ContractID, style: str = ''):
 
 @app.get('/gdb/by-ip/{client_ip}/')
 def gdb_get_client_by_ip_full(client_ip: IPv4Address, style: str = ''):
+    gdb = get_gdb_instance(SECRETS['gray_database'])
     contract_id = gdb.get_contract_by_ip(client_ip)
     return gdb_get_client_by_contract_full(contract_id, style)
 
