@@ -173,17 +173,25 @@ class GRAYDB:
         # get street from first (selected) option in select
         res['street'] = d.find(
             'select', {'name': 'ulitsa'}).option.get('value').strip()
-        # get contacts without dublicates and empty strings
+        # generate contact list
         res['contact_list'] = []
         for i in range(1, 4):
             c = d.find(attrs={'name': f'cont{i}'}).get('value')
-            if c != '' and c not in res['contact_list']:
+            # skip empty strings and legacy values
+            if c in ['', '0']:
+                continue
+            # ignore duplicates
+            if c not in res['contact_list']:
                 res['contact_list'].append(c)
         # comment string from textarea
-        res['comment'] = d.find(attrs={'name': 'primechanie'}).string
+        res['comment'] = d.find(attrs={'name': 'primechanie'}).string.strip()
         # search for terminated mark
         res['terminated'] = bool(
             raw.find('font', {'color': 'red', 'size': '2px'}))
+        # clear legacy values from old db
+        for i in res:
+            if res[i] == '0':
+                res[i] = ''
         return res
 
     @_check_auth
