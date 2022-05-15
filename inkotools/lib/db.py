@@ -152,6 +152,17 @@ class DB:
     def _decrypt(self, s: str):
         return self._crypto.decrypt(bytes(s, 'utf-8')).decode()
 
+    def migrate(self, version: str):
+        """Make migration from file"""
+        with open(ROOT_DIR/'migrations'/f'{version}.sql', 'r') as f:
+            sql = f.read()
+            if not self.is_connected:
+                self._open()
+            log.info(f'Migrating to {version}')
+            if self._cursor.executescript(sql) is not None:
+                self._connection.commit()
+                log.info('Finished successful')
+
     def add(self, sw):
         """Add new switch or update changes
 

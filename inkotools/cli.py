@@ -103,6 +103,11 @@ def update_aliases():
         log.info(f'Done, {cnt} entries added/updated.')
 
 
+def migrate_database(version: str):
+    """Migrate database"""
+    db.migrate(version)
+
+
 def config_setup():
     """User-interactive secrets setup"""
     secrets = dict()
@@ -132,6 +137,7 @@ def main():
     db_parser = module_parser.add_parser('db')
     db_parser.add_argument('-u', '--update', action='store_true')
     db_parser.add_argument('--update-aliases', action='store_true')
+    db_parser.add_argument('--migrate', metavar='VERSION', type=str)
 
     # cfg module
     cfg_parser = module_parser.add_parser('cfg')
@@ -168,6 +174,8 @@ def main():
             exit('Run cfg --setup')
 
     elif ARGS.module == 'db':
+        if ARGS.migrate:
+            migrate_database(ARGS.migrate)
         if ARGS.update:
             update_database()
         if ARGS.update_aliases:
