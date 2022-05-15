@@ -10,6 +10,7 @@ import pathlib
 # external imports
 import netaddr
 import yaml
+from cryptography.fernet import Fernet
 
 # module logger
 log = logging.getLogger(__name__)
@@ -83,6 +84,13 @@ except Exception as e:
 
 # credetials
 SECRETS = load_cfg('secrets')
+
+# generate new secret key on first run
+if 'secret_key' not in SECRETS.keys():
+    log.warning('Generating new secret key')
+    SECRETS['secret_key'] = Fernet.generate_key().decode()
+    write_cfg('secrets', SECRETS)
+
 
 # common settings
 COMMON = load_cfg('common')

@@ -9,9 +9,10 @@ from collections import namedtuple
 
 # external imports
 import netaddr
+from cryptography.fernet import Fernet
 
 # local imports
-from .cfg import ROOT_DIR
+from .cfg import ROOT_DIR, SECRETS
 
 # module logger
 log = logging.getLogger(__name__)
@@ -47,6 +48,11 @@ class DB:
                     ip integer NOT NULL,
                     FOREIGN KEY (ip) REFERENCES switches(ip)
                         ON DELETE CASCADE ON UPDATE CASCADE);
+
+                CREATE TABLE IF NOT EXISTS gdb_users (
+                    username text NOT NULL UNIQUE,
+                    password text NOT NULL,
+                    token text NOT NULL UNIQUE);
             '''
 
     UPSERT = '''INSERT INTO switches (ip, mac, model, location)
@@ -95,6 +101,8 @@ class DB:
             if self._cursor.executescript(self.SCHEMA) is not None:
                 self._connection.commit()
                 log.info('New database created')
+        # init cryptography module
+        self._crypto = Fernet(SECRETS['secret_key'])
 
     def __del__(self):
         # close database on exit
@@ -137,6 +145,12 @@ class DB:
             return None
         else:
             return result
+
+    def _encrypt(self, s: str):
+        return self._crypto.encrypt(bytes(s, 'utf-8')).decode()
+
+    def _decrypt(self, s: str):
+        return self._crypto.decrypt(bytes(s, 'utf-8')).decode()
 
     def add(self, sw):
         """Add new switch or update changes
@@ -317,6 +331,74 @@ class DB:
         query += ';'
 
         return [alias_row_format(row) for row in self._exec(query)]
+
+    def add_gdb_user(self, username: str, password: str, token: str):
+        """Add or update graydatabase user credentials"""
+        user = self.get_gdb_user(username)
+        if user is not None:
+            # check changes in password or token
+            if user['password'] != password or user['token'] != token:
+                msg = f'Updating user [{username}]'
+                sql = "UPDATE gdb_users \
+                        SET password = '{password}', token = '{token}' \
+                        WHERE username = '{username}';"
+            else:
+                msg = f'Nothing to change for [{username}]'
+                log.debug(msg)
+                return msg
+        else:
+            msg = f'Adding new user [{username}]'
+            sql = "INSERT INTO gdb_users (username, password, token) \
+                        VALUES ('{username}','{password}','{token}');"
+
+        query = sql.format(
+            username=username,
+            password=self._encrypt(password),
+            token=token)
+
+        res = self._exec(query)
+        if res is None:
+            msg += ' failed'
+            log.error(msg)
+            return {"error": msg}
+        else:
+            self._connection.commit()
+            msg += ' succeeded'
+            log.info(msg)
+            return msg
+
+    def get_gdb_user(self, keyword: str):
+        """Get user by name or token"""
+        sql = "SELECT * FROM gdb_users \
+                    WHERE username = '{keyword}' OR token = '{keyword}'"
+        query = sql.format(keyword=keyword)
+        res = self._exec(query).fetchone()
+        if res is None:
+            log.debug(f'{keyword} not found')
+        else:
+            res = dict(res)
+            res['password'] = self._decrypt(res['password'])
+        return res
+
+    def delete_gdb_user(self, username: str):
+        """Remove gdb user from database"""
+        sql = "DELETE FROM gdb_users WHERE username = '{username}'"
+        query = sql.format(username=username)
+        res = self._exec(query)
+        msg = f'Deleting [{username}]'
+        if res is not None:
+            if res.rowcount == 0:
+                msg += ' skipped (not found)'
+                log.debug(msg)
+            else:
+                self._connection.commit()
+                msg += ' succeeded'
+                log.info(msg)
+            return msg
+        else:
+            msg += ' failed'
+            log.error(msg)
+            return {"error": msg}
 
 
 def sw_row_format(row):

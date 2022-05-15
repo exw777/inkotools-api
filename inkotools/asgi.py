@@ -4,11 +4,12 @@
 # internal imports
 import logging
 import re
+import secrets
 from ipaddress import IPv4Address
 from typing import Optional
 
 # external imports
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ValidationError, validator
@@ -34,6 +35,10 @@ SWITCHES = {}
 
 # init gdb users storage
 GDB_USERS = {}
+
+# TODO: move this part to pool
+# gdb account for common use
+GDB = GRAYDB(COMMON['GRAYDB_URL'], SECRETS['gray_database'])
 
 
 def get_sw_instance(sw_ip):
@@ -82,18 +87,18 @@ def get_sw_instance(sw_ip):
         return sw
 
 
-def get_gdb_instance(creds):
-    user = creds['login']
-    log.debug(f'creds: {creds}')
-    if user in GDB_USERS:
-        log.debug(f'Attaching to existing gdb instance for {user}')
+def get_gdb_instance(token):
+    if token in GDB_USERS:
+        log.debug('Attaching to existing gdb instance')
     else:
-        log.debug(f'New gdb instance for {user}')
-        # workaround for optional password field
-        if creds['password'] is None:
-            raise GRAYDB.CredentialsError('Missing password for first auth')
-        GDB_USERS[user] = GRAYDB(COMMON['GRAYDB_URL'], creds)
-    return GDB_USERS[user]
+        # search for user in database
+        user = db.get_gdb_user(token)
+        if user is None:
+            raise GRAYDB.CredentialsError('Invalid token')
+        creds = {"login": user['username'], "password": user['password']}
+        GDB_USERS[token] = GRAYDB(COMMON['GRAYDB_URL'], creds)
+        log.debug(f"New gdb instance for [{user['username']}]")
+    return GDB_USERS[token]
 
 
 def fmt_result(data, meta=None):
@@ -318,12 +323,42 @@ class ContractID(str):
 
 class CredsModel(BaseModel):
     login: str
-    password: Optional[str]
+    password: str
+
+
+@app.get('/gdb/user')
+def gdb_get_user(keyword: str = Body(..., embed=True)):
+    return fmt_result(db.get_gdb_user(keyword))
+
+
+@app.delete('/gdb/user')
+def gdb_delete_user(username: str = Body(..., embed=True)):
+    res = db.delete_gdb_user(username)
+    return fmt_result(res)
+
+
+@app.post('/gdb/user/get_token')
+def gdb_user_get_token(creds: CredsModel):
+    # search user in db
+    user = db.get_gdb_user(creds.login)
+    if user is not None and user['password'] == creds.password:
+        log.debug(f'Using existing token for [{creds.login}]')
+        token = user['token']
+    else:
+        # generate new 32-bytes token
+        log.info(f'Generating new token for [{creds.login}]')
+        token = secrets.token_hex(32)
+        # create new gdb instance for password validation
+        GDB_USERS[token] = GRAYDB(COMMON['GRAYDB_URL'], dict(creds))
+        # add user to database
+        db.add_gdb_user(username=creds.login, password=creds.password,
+                        token=token)
+    return fmt_result({"token": token})
 
 
 @app.post('/gdb/tickets')
-def gdb_tickets(creds: CredsModel):
-    gdb = get_gdb_instance(dict(creds))
+def gdb_tickets(token: str = Body(..., embed=True)):
+    gdb = get_gdb_instance(token)
     data = gdb.get_tickets()
     meta = {"entries": len(data)}
     return fmt_result(data, meta)
@@ -331,22 +366,20 @@ def gdb_tickets(creds: CredsModel):
 
 @app.get('/gdb/{contract_id}/')
 def gdb_get_client_by_contract_full(contract_id: ContractID, style: str = ''):
-    gdb = get_gdb_instance(SECRETS['gray_database'])
     if style == 'short':
-        data = gdb.get_client_data(contract_id)
+        data = GDB.get_client_data(contract_id)
     elif style == 'billing':
-        data = gdb.get_billing_accounts(contract_id)
+        data = GDB.get_billing_accounts(contract_id)
     # default: full
     else:
-        data = gdb.get_client_data(contract_id)
-        data['billing_accounts'] = gdb.get_billing_accounts(contract_id)
+        data = GDB.get_client_data(contract_id)
+        data['billing_accounts'] = GDB.get_billing_accounts(contract_id)
     return fmt_result(data)
 
 
 @app.get('/gdb/by-ip/{client_ip}/')
 def gdb_get_client_by_ip_full(client_ip: IPv4Address, style: str = ''):
-    gdb = get_gdb_instance(SECRETS['gray_database'])
-    contract_id = gdb.get_contract_by_ip(client_ip)
+    contract_id = GDB.get_contract_by_ip(client_ip)
     return gdb_get_client_by_contract_full(contract_id, style)
 
 
