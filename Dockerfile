@@ -8,6 +8,7 @@ RUN apk update && apk add --update-cache \
         gcc \
         libc-dev \
         build-base \
+	libffi-dev \
         net-snmp-dev && \
     pip install --no-cache-dir \
         Cython \
