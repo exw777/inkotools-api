@@ -327,14 +327,16 @@ class CredsModel(BaseModel):
 
 
 @app.get('/gdb/user')
-def gdb_get_user(keyword: str = Body(..., embed=True)):
-    return fmt_result(db.get_gdb_user(keyword))
+def gdb_get_user(token: str = Body(..., embed=True)):
+    gdb = get_gdb_instance(token)
+    username = gdb.credentials['login']
+    return fmt_result({"username": username})
 
 
-@app.delete('/gdb/user')
-def gdb_delete_user(username: str = Body(..., embed=True)):
-    res = db.delete_gdb_user(username)
-    return fmt_result(res)
+# @app.delete('/gdb/user')
+# def gdb_delete_user(username: str = Body(..., embed=True)):
+#     res = db.delete_gdb_user(username)
+#     return fmt_result(res)
 
 
 @app.post('/gdb/user/get_token')
