@@ -221,7 +221,7 @@ class GRAYDB:
             # strip '№ ' from ticket id
             ticket['ticket_id'] = int(ticket['ticket_id'][2:])
             # convert contacts to list
-            ticket['contacts'] = ticket['contacts'].split()
+            ticket['contacts'] = list(set(ticket['contacts'].split()))
             # convert str to date
             ticket['date'] = datetime.strptime(
                 ticket['date'], '%d-%m-%y').date()
