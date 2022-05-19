@@ -170,9 +170,14 @@ class GRAYDB:
         # iterate through the form inputs
         for key, val in m_dict.items():
             res[key] = d.find(attrs={'name': val}).get('value')
-        # get street from first (selected) option in select
-        res['street'] = d.find(
-            'select', {'name': 'ulitsa'}).option.get('value').strip()
+        # get city and street from first (selected) option in select
+        m_dict = {
+            'city': 'gorod',
+            'street': 'ulitsa',
+        }
+        for key, val in m_dict.items():
+            res[key] = d.find(
+                'select', {'name': val}).option.get('value').strip()
         # generate contact list
         res['contact_list'] = []
         for i in range(1, 4):
