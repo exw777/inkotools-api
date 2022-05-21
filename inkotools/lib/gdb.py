@@ -5,6 +5,7 @@
 import logging
 import re
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 # external imports
 import mechanicalsoup
@@ -212,7 +213,8 @@ class GRAYDB:
             ticket = dict(zip(keys, values))
             # convert date from string to date
             ticket['date'] = datetime.strptime(
-                ticket['date'], '%d-%m-%y').date()
+                ticket['date'], '%d-%m-%y').replace(
+                tzinfo=ZoneInfo('Europe/Moscow'))
             tickets.append(ticket)
         res['tickets'] = tickets
         return res
@@ -245,7 +247,8 @@ class GRAYDB:
             ticket['contacts'] = list(set(ticket['contacts'].split()))
             # convert str to date
             ticket['date'] = datetime.strptime(
-                ticket['date'], '%d-%m-%y').date()
+                ticket['date'], '%d-%m-%y').replace(
+                tzinfo=ZoneInfo('Europe/Moscow'))
             # add comments
             ticket['comments'] = parse_comments(row)
             tickets.append(ticket)
@@ -261,7 +264,9 @@ def parse_comments(tag):
     comments = []
     for i, e in enumerate(tag.find_all(href='#')):
         comments.append({
-            "time": datetime.strptime(e['title'], '%d.%m.%Y %H:%M:%S'),
+            "time": datetime.strptime(
+                e['title'], '%d.%m.%Y %H:%M:%S').replace(
+                tzinfo=ZoneInfo('Europe/Moscow')),
             "author": e.string,
             "comment": list(e.parent.strings)[(i+1)*2].strip()[2:-1],
         })
