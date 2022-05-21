@@ -197,15 +197,32 @@ class GRAYDB:
         for i in res:
             if res[i] == '0':
                 res[i] = ''
+        # search for tickets
+        tickets = []
+        keys = ['ticket_id', 'issue', 'date', 'master', 'creator', 'comments']
+        for t in raw.find_all(attrs={'name': 'id_start_zay'}):
+            # get columns as reverted previous siblings of current
+            cols = t.parent.find_previous_siblings()[4::-1]
+            # generate values from td tags without last (comments)
+            values = [x.string.split(':', 1)[1].strip() for x in cols[:-1]]
+            # split comments (last column)
+            comments = parse_comments(cols[-1])
+            # join ticket_id and other values
+            values = [int(t['value']), *values, comments]
+            ticket = dict(zip(keys, values))
+            # convert date from string to date
+            ticket['date'] = datetime.strptime(
+                ticket['date'], '%d-%m-%y').date()
+            tickets.append(ticket)
+        res['tickets'] = tickets
         return res
 
     @_check_auth
     def get_tickets(self):
         """Get list of tickets"""
-
         tickets = []
         keys = ['ticket_id', 'contract_id', 'name', 'issue', 'address',
-                'contacts', 'date', 'created_by', 'status']
+                'contacts', 'date', 'creator']
         raw = self.browser.get(f'{self.baseurl}/zayavki.php')
         raw = raw.soup
         for row in raw.tbody.find_all('tr'):
@@ -213,23 +230,39 @@ class GRAYDB:
                 r' +', ' ', x.text.strip()), row.find_all('td')))
             # normal user tickets
             if len(values) == 11:
-                values = values[0:9]
+                values = values[0:8]
             # boss tickets
             elif len(values) == 13:
-                values = values[1:10]
+                values = values[1:9]
             # error
             else:
                 self.log.error(f'Wrong ticket structure: {values}')
                 continue
             ticket = dict(zip(keys, values))
-
-            # strip '№ ' from ticket id
+            # strip '№ ' from ticket id and convert to int
             ticket['ticket_id'] = int(ticket['ticket_id'][2:])
-            # convert contacts to list
+            # convert contacts to list and remove duplicates
             ticket['contacts'] = list(set(ticket['contacts'].split()))
             # convert str to date
             ticket['date'] = datetime.strptime(
                 ticket['date'], '%d-%m-%y').date()
+            # add comments
+            ticket['comments'] = parse_comments(row)
             tickets.append(ticket)
-
         return tickets
+
+
+########################################################################
+# common functions
+
+
+def parse_comments(tag):
+    """Search for comments within soup tag"""
+    comments = []
+    for i, e in enumerate(tag.find_all(href='#')):
+        comments.append({
+            "time": datetime.strptime(e['title'], '%d.%m.%Y %H:%M:%S'),
+            "author": e.string,
+            "comment": list(e.parent.strings)[(i+1)*2].strip()[2:-1],
+        })
+    return comments
