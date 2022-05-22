@@ -249,6 +249,8 @@ class GRAYDB:
             ticket['date'] = datetime.strptime(
                 ticket['date'], '%d-%m-%y').replace(
                 tzinfo=ZoneInfo('Europe/Moscow'))
+            # truncate address
+            ticket['address'] = ticket['address'].replace('Коломна ул. ', '')
             # add comments
             ticket['comments'] = parse_comments(row)
             tickets.append(ticket)
