@@ -366,6 +366,16 @@ def gdb_get_user_tickets(token: str = Body(..., embed=True)):
     return fmt_result(data, meta)
 
 
+@app.post('/gdb/{contract_id}/tickets/{ticket_id}/')
+def gdb_add_ticket_comment(contract_id: ContractID, ticket_id: int,
+                           token: str = Body(..., embed=True),
+                           comment: str = Body(..., embed=True)):
+    gdb = get_gdb_instance(token)
+    res = gdb.add_comment(contract_id=contract_id, ticket_id=ticket_id,
+                          comment=comment)
+    return fmt_result(res)
+
+
 @app.get('/gdb/{contract_id}/')
 def gdb_get_client_by_contract_full(contract_id: ContractID, style: str = ''):
     if style == 'short':

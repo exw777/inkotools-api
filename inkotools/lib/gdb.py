@@ -215,6 +215,9 @@ class GRAYDB:
             ticket['date'] = datetime.strptime(
                 ticket['date'], '%d-%m-%y').replace(
                 tzinfo=ZoneInfo('Europe/Moscow'))
+            # raw comments for add_comment
+            ticket['raw_comments'] = t.parent.find(
+                attrs={"name": "id_start_stadya"})["value"]
             tickets.append(ticket)
         res['tickets'] = tickets
         return res
@@ -253,6 +256,35 @@ class GRAYDB:
             ticket['comments'] = parse_comments(row)
             tickets.append(ticket)
         return tickets
+
+    @_check_auth
+    def add_comment(self, contract_id: str, ticket_id: int, comment: str):
+        """Add comment to ticket"""
+        ticket_found = False
+        client = self.get_client_data(contract_id)
+        # ticket validation and getting old comments
+        # in graydb we need to add all the old comments with the new one
+        for i in client["tickets"]:
+            if i["ticket_id"] == ticket_id:
+                ticket_found = True
+                old_comments = i["raw_comments"]
+                break
+        if not ticket_found:
+            raise self.NotFoundError('Ticket not found')
+        data = {"tekst_zay": comment.encode("cp1251"),
+                "id_start_zay": ticket_id,
+                "id_start_stadya": old_comments.encode("cp1251"),
+                }
+        user = self.credentials['login']
+        log.debug(f'[{user}] contract {contract_id}, ticket {ticket_id}, '
+                  f'comment: {comment}')
+        res = self.browser.post(f'{self.baseurl}/index.php', data=data)
+        if res.ok:
+            log.info(f'[{user}] commented [{contract_id}]')
+            return 'Comment added successfully'
+        else:
+            log.error(f'[{user}] failed to comment [{contract_id}]')
+            return {'error': 'Failed to add comment'}
 
 
 ########################################################################
