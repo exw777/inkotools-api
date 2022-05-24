@@ -358,8 +358,8 @@ def gdb_user_get_token(creds: CredsModel):
     return fmt_result({"token": token})
 
 
-@app.post('/gdb/tickets')
-def gdb_tickets(token: str = Body(..., embed=True)):
+@app.get('/gdb/user/tickets')
+def gdb_get_user_tickets(token: str = Body(..., embed=True)):
     gdb = get_gdb_instance(token)
     data = gdb.get_tickets()
     meta = {"entries": len(data)}
