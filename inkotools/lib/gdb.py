@@ -2,6 +2,7 @@
 # lib/gdb.py
 
 # internal imports
+import html
 import logging
 import re
 from datetime import datetime
@@ -271,6 +272,7 @@ class GRAYDB:
                 break
         if not ticket_found:
             raise self.NotFoundError('Ticket not found')
+        comment = html.escape(comment)
         data = {"tekst_zay": comment.encode("cp1251"),
                 "id_start_zay": ticket_id,
                 "id_start_stadya": old_comments.encode("cp1251"),
