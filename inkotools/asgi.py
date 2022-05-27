@@ -362,7 +362,7 @@ def gdb_user_get_token(creds: CredsModel):
 def gdb_get_user_tickets(token: str = Body(..., embed=True)):
     gdb = get_gdb_instance(token)
     data = gdb.get_tickets()
-    meta = {"entries": len(data)}
+    meta = {"entries": len(data), "username": gdb.credentials['login']}
     return fmt_result(data, meta)
 
 
