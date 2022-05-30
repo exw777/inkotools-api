@@ -1231,7 +1231,7 @@ class Switch:
             keys = ['port', 'temperature', 'voltage', 'bias_current',
                             'tx_power', 'rx_power']
             # last two values - power in dbm
-            values = list(map(float, re.findall(rgx, raw)[:-2]))
+            values = list(map(float, re.findall(rgx, raw)[:6]))
 
         if len(keys) == len(values):
             res = dict(zip(keys, values))
