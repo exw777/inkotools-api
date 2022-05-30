@@ -91,7 +91,7 @@ class GRAYDB:
     def get_billing_accounts(self, contract_id: str):
         """Get list of client services from billing"""
         raw = self.browser.post(f'{self.baseurl}/bil.php',
-                                data={"nome_dogo": contract_id, "go": 1})
+                                data={"nome_dogo": contract_id})
         account_types = [
             "internet",
             "telephony",
@@ -104,20 +104,20 @@ class GRAYDB:
         for idx, row in enumerate(raw.soup.select('table tr')[1:]):
             item = {}
             item['account_id'] = int(row.contents[0].string)
-            item['services'] = list(row.contents[1].strings)
+            item['services'] = list(map(gdb_decode, row.contents[1].strings))
             # remove `,` and `;` symbols and split without empty strings
             ip_tel = row.contents[3].string.translate(
                 {ord(i): None for i in ';,'}).split()
             # internet
             if idx == 0:
-                item['tariff'] = row.contents[2].string
+                item['tariff'] = gdb_decode(row.contents[2].string)
                 item['ip_list'] = ip_tel
             # telephony
             elif idx < 3:
                 item['number_list'] = ip_tel
             item['balance'] = float(row.contents[5].string)
             item['credit'] = float(row.contents[7].string)
-            status = row.contents[8].string
+            status = gdb_decode(row.contents[8].string)
             item['enabled'] = True if status == "Разблокирован" else False
             res[account_types[idx]] = item
 
@@ -127,7 +127,7 @@ class GRAYDB:
         """Find contract with client ip"""
         client_ip = str(client_ip)
         raw = self.browser.post(f'{self.baseurl}/poisk_test.php',
-                                data={"ip": client_ip, "go99": 1})
+                                data={"ip": client_ip})
         # graydb has fuzzy search, so iterate through several contracts
         # and check if contract's ip is the searched ip
         for row in raw.soup.select('tbody tr'):
@@ -151,9 +151,8 @@ class GRAYDB:
     def get_client_data(self, contract_id: str):
         """Get client info from gray database"""
         client_id = self.get_internal_client_id(contract_id)
-        raw = self.browser.get(
-            f'{self.baseurl}/index.php',
-            params={"id_aabon": client_id})
+        raw = self.browser.get(f'{self.baseurl}/index.php',
+                               params={"id_aabon": client_id})
         raw = raw.soup
         res = {'contract_id': contract_id, 'client_id': client_id}
         # matching dict between returning keys and form input names
@@ -233,7 +232,7 @@ class GRAYDB:
         raw = raw.soup
         for row in raw.tbody.find_all('tr'):
             values = list(map(lambda x: re.sub(
-                r' +', ' ', x.text.strip()), row.find_all('td')))
+                r' +', ' ', gdb_decode(x.text).strip()), row.find_all('td')))
             # normal user tickets
             if len(values) == 11:
                 values = values[0:8]
@@ -301,7 +300,16 @@ def parse_comments(tag):
             "time": datetime.strptime(
                 e['title'], '%d.%m.%Y %H:%M:%S').replace(
                 tzinfo=ZoneInfo('Europe/Moscow')),
-            "author": e.string,
-            "comment": list(e.parent.strings)[(i+1)*2].strip()[2:-1],
+            "author": gdb_decode(e.string),
+            "comment": list(map(
+                gdb_decode, e.parent.strings))[(i+1)*2].strip()[2:-1],
         })
     return comments
+
+
+def gdb_decode(s):
+    try:
+        res = s.encode('ISO-8859-1').decode('cp1251')
+    except Exception:
+        res = s
+    return res
