@@ -386,7 +386,8 @@ def gdb_get_client_by_contract_full(contract_id: ContractID, style: str = ''):
     else:
         data = GDB.get_client_data(contract_id)
         data['billing_accounts'] = GDB.get_billing_accounts(contract_id)
-    return fmt_result(data)
+    meta = {"contract_id": contract_id}
+    return fmt_result(data, meta)
 
 
 @app.get('/gdb/by-ip/{client_ip}/')
