@@ -585,7 +585,8 @@ class Switch:
                 r'(?P<port>\d{1,2})(?:\s*\((?P<type>C|F)\))?\s+'
                 r'(?P<state>Enabled|Disabled)\s+'
                 r'(?P<speed>Auto|10+\w/(?:Full|Half))/\w+\s+'
-                r'(?P<link>Link ?Down|10+\w/(?:Full|Half))(?:/\w+)?\s+'
+                r'(?P<link>Link ?Down|10+\w/(?:Full|Half)|Err[\w-]+)'
+                r'(?:/\w+)?\s+'
                 r'(?P<learning>Enabled|Disabled)\s+'
                 r'(?P<autodowngrade>Enabled|Disabled|-)?'
                 r'(?s:.*?)Desc[a-z]*: +(?P<desc>.*[^\s])?'
@@ -599,12 +600,13 @@ class Switch:
                 else:
                     # on 3526 this field is trap
                     res['autodowngrade'] = None
-                if re.search(r'(?i:down)', res['link']):
-                    res['link'] = False
+                # set bool and str link status
+                down = re.search(r'Down|Err', res['link'])
+                res['status'] = res['link']
+                res['link'] = False if down else True
+                # clear status on link down (not error disabled)
+                if down and down.group() == 'Down':
                     res['status'] = None
-                else:
-                    res['status'] = res['link']
-                    res['link'] = True
                 res['state'] = str_to_bool(res['state'])
                 res['learning'] = str_to_bool(res['learning'])
                 res['port'] = int(res['port'])

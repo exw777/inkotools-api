@@ -517,11 +517,10 @@ def switch_get_port_summary(sw_ip: IPv4Address, port_id: int):
                 cable = sw.check_cable(port_id)
             except Switch.ModelError:
                 cable = None
-            if isinstance(cable, str):
-                # 'no cable' string
-                port['status'] = cable
-            else:
+            if isinstance(cable, dict):
                 port['cable'] = cable
+            elif port['status'] is None:
+                port['status'] = cable
         # add ddm transceiver info for fiber ports
         elif port['type'] == 'F':
             try:
