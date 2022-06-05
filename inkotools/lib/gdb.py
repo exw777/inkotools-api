@@ -127,7 +127,7 @@ class GRAYDB:
         """Find contract with client ip"""
         client_ip = str(client_ip)
         raw = self.browser.post(f'{self.baseurl}/poisk_test.php',
-                                data={"ip": client_ip})
+                                data={"ip": client_ip, "go99": 1})
         # graydb has fuzzy search, so iterate through several contracts
         # and check if contract's ip is the searched ip
         for row in raw.soup.select('tbody tr'):
