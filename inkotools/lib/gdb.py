@@ -32,7 +32,7 @@ class GRAYDB:
         """
         self.browser = mechanicalsoup.StatefulBrowser(
             raise_on_404=True,
-            user_agent='inkotools-api/0.2',
+            user_agent='inkotools-api/0.3',
         )
         self.baseurl = url
         self.credentials = credentials
@@ -112,15 +112,27 @@ class GRAYDB:
             if idx == 0:
                 item['tariff'] = gdb_decode(row.contents[2].string)
                 item['ip_list'] = ip_tel
+                if len(item['ip_list']) > 0:
+                    item['speed'] = self.get_billing_speed(item['ip_list'][0])
             # telephony
             elif idx < 3:
                 item['number_list'] = ip_tel
             item['balance'] = float(row.contents[5].string)
             item['credit'] = float(row.contents[7].string)
             status = gdb_decode(row.contents[8].string)
-            item['enabled'] = True if status == "Разблокирован" else False
+            item['enabled'] = True if status == 'Разблокирован' else False
             res[account_types[idx]] = item
 
+        return res
+
+    def get_billing_speed(self, ip: str):
+        """Get billing speed for ip address"""
+        ip = str(ip)
+        raw = self.browser.get(f'http://62.182.48.36/speed/index.php?ip1={ip}')
+        try:
+            res = list(raw.soup.strings)[4].split('= ')[1]
+        except IndexError:
+            res = raw.soup.body.string.strip()
         return res
 
     def get_contract_by_ip(self, client_ip: str):
