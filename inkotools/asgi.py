@@ -6,6 +6,7 @@ import logging
 import re
 import secrets
 from ipaddress import IPv4Address
+from requests.exceptions import ConnectionError
 from typing import Optional
 
 # external imports
@@ -151,6 +152,13 @@ async def graydb_404_exception_handler(request, exc):
 async def graydb_creds_exception_handler(request, exc):
     """Gray database credentials error handler"""
     return JSONResponse(content={"detail": str(exc)}, status_code=401)
+
+
+@app.exception_handler(ConnectionError)
+async def networking_exception_handler(request, exc):
+    """Networking error handler"""
+    return JSONResponse(content={"detail": "Connection error"},
+                        status_code=503)
 
 
 @app.exception_handler(Switch.ModelError)
