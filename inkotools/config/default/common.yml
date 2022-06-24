@@ -15,7 +15,12 @@ backup_path: ''
 git_author: Backup routine script <robot@inko.tools>
 
 # disable icmp and snmp to use with proxychains
-tcp_only_mode: false
+proxy_mode: false
+proxy_ip: '127.0.0.1'
+proxy_port: 1080
+
+# custom telnet command
+telnet_cmd: telnet
 
 # service vlans/subnets restricted for client use
 SERVICE_VLANS:

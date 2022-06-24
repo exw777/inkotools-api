@@ -64,7 +64,7 @@ def get_sw_instance(sw_ip):
                 raise Switch.UnavailableError(f'{sw_ip} is not available')
         else:
             log.debug(f'creating new switch {sw_ip}')
-            if COMMON['tcp_only_mode']:
+            if COMMON['proxy_mode']:
                 data = db.get(sw_ip)
             else:
                 data = None

@@ -40,8 +40,6 @@ RUN apk update && apk add --no-cache \
 
 ENV GUNICORN_THREADS=4 \
     LISTEN_PORT=9999 \
-    PROXYCHAINS_ENABLED="" \
-    PROXYCHAINS_CONFIG_FILE="/etc/proxychains/proxychains.conf" \
     PYTHONPATH="${PYTHONPATH}:/deps"
 
 EXPOSE $LISTEN_PORT

@@ -150,7 +150,7 @@ def main():
     if ARGS.module == 'sw':
         ip = full_ip(ARGS.ip)
         data = None
-        if COMMON['tcp_only_mode']:
+        if COMMON['proxy_mode']:
             # get local data
             data = db.get(ip)
         try:
@@ -159,7 +159,7 @@ def main():
                 sw = Switch(**data)
             else:
                 sw = Switch(ip)
-                if COMMON['tcp_only_mode']:
+                if COMMON['proxy_mode']:
                     db.add(sw)
 
             if ARGS.interact:

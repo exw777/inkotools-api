@@ -23,8 +23,9 @@ from .cfg import ROOT_DIR, COMMON, SECRETS, NETS, PIP_NETS
 log = logging.getLogger(__name__)
 
 # dynamic imports for normal mode
-if COMMON['tcp_only_mode']:
-    log.debug('Working in tcp-only mode')
+if COMMON['proxy_mode']:
+    log.info('Working in tcp-only mode')
+    import socks
 else:
     from arpreq import arpreq
     from easysnmp import snmp_get
@@ -74,7 +75,7 @@ class Switch:
                 f'Host {str(self.ip)} is not available!')
 
         # tcp only mode for proxychains use
-        if COMMON['tcp_only_mode']:
+        if COMMON['proxy_mode']:
             # first try to get data provided via class constructor
             self.model = model
             self.location = location
@@ -243,32 +244,42 @@ class Switch:
         check availability: arp --> icmp --> telnet
         arpreq is faster than icmp, but only works when
         there is a corresponding entry in the local arp table
-        first two check are skipping in no-snmp mode
+        first two check are skipping in proxy mode
         """
-        if not COMMON['tcp_only_mode']:
+        if not COMMON['proxy_mode']:
             if arpreq(self.ip) or ping(self.ip).is_alive:
                 return True
         # third check is via tcp port 80 (web) and 23 (telnet)
         for p in [80, 23]:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            if COMMON['proxy_mode']:
+                s = socks.socksocket(socks.socket.AF_INET,
+                                     socks.socket.SOCK_STREAM)
+                s.set_proxy(
+                    socks.SOCKS5, COMMON['proxy_ip'], COMMON['proxy_port'])
+            else:
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.settimeout(0.5)
-            if s.connect_ex((str(self.ip), p)) == 0:
-                s.close()
-                return True
+            try:
+                if s.connect_ex((str(self.ip), p)) == 0:
+                    s.close()
+                    return True
+            except (socks.ProxyError, socket.timeout):
+                pass
             s.close()
         return False
 
     def get_oid(self, oid):
         """Get snmp oid from switch"""
-        if COMMON['tcp_only_mode']:
-            self.error('Calling snmp in tcp-only mode')
+        if COMMON['proxy_mode']:
+            self.log.error('Calling snmp in tcp-only mode')
             return None
         return snmp_get(oid, hostname=str(self.ip),
                         version=2, timeout=3).value
 
     def _setup_telnet_model(self):
         """Get model via telnet"""
-        tn = pexpect.spawn(f'telnet {self.ip}', timeout=10, encoding="utf-8")
+        tn = pexpect.spawn(
+            f"{COMMON['telnet_cmd']} {self.ip}", timeout=10, encoding='utf-8')
         matches = {
             'DXS-1210-12SC/A1': 'DXS-1210-12SC Switch',
             're':               r'[A-Z]{1,3}-?[0-9]{1,4}[^ ]*',
@@ -334,8 +345,9 @@ class Switch:
 
             self.log.debug('spawning telnet...')
             # codec_errors='ignore' - ignore non-unicode symbols
-            tn = pexpect.spawn(f'telnet {self.ip}', timeout=120,
-                               encoding='utf-8', codec_errors='ignore')
+            tn = pexpect.spawn(
+                f"{COMMON['telnet_cmd']} {self.ip}",
+                timeout=120, encoding='utf-8', codec_errors='ignore')
 
             login_promt = 'ame:|in:'
             fail_matches = {
