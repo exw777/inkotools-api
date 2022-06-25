@@ -6,6 +6,7 @@ import logging
 import pathlib
 import sqlite3
 from collections import namedtuple
+from threading import Lock
 
 # external imports
 import netaddr
@@ -16,6 +17,9 @@ from .cfg import ROOT_DIR, SECRETS
 
 # module logger
 log = logging.getLogger(__name__)
+
+# thread lock
+lock = Lock()
 
 
 class DB:
@@ -86,7 +90,7 @@ class DB:
                 LIMIT {limit} OFFSET {offset};
                 '''
 
-    def __init__(self, db_name):
+    def __init__(self, db_name, open_on_init=False):
         # create datadir if not exists
         db_path = ROOT_DIR/'data'
         pathlib.Path(db_path).mkdir(parents=True, exist_ok=True)
@@ -103,6 +107,10 @@ class DB:
                 log.info('New database created')
         # init cryptography module
         self._crypto = Fernet(SECRETS['secret_key'])
+        log.debug('Database initialized')
+        # open connection if needed
+        if open_on_init and not self.is_connected:
+            self._open()
 
     def __del__(self):
         # close database on exit
@@ -139,12 +147,15 @@ class DB:
             self._open()
         log.debug(f'Executing sql: {sql_query}')
         try:
+            lock.acquire(True)
             result = self._cursor.execute(sql_query)
         except Exception as e:
             log.error(e)
             return None
         else:
             return result
+        finally:
+            lock.release()
 
     def _encrypt(self, s: str):
         return self._crypto.encrypt(bytes(s, 'utf-8')).decode()

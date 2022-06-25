@@ -26,7 +26,7 @@ log = logging.getLogger(__name__)
 
 
 # init db
-db = DB(COMMON['DB_FILE'])
+db = DB(COMMON['DB_FILE'], open_on_init=True)
 
 # init fastapi
 app = FastAPI()
