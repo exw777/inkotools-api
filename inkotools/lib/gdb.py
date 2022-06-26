@@ -32,7 +32,7 @@ class GRAYDB:
         """
         self.browser = mechanicalsoup.StatefulBrowser(
             raise_on_404=True,
-            user_agent='inkotools-api/0.3',
+            user_agent='inkotools-api/0.4',
         )
         self.baseurl = url
         self.credentials = credentials
@@ -112,8 +112,6 @@ class GRAYDB:
             if idx == 0:
                 item['tariff'] = gdb_decode(row.contents[2].string)
                 item['ip_list'] = ip_tel
-                if len(item['ip_list']) > 0:
-                    item['speed'] = self.get_billing_speed(item['ip_list'][0])
             # telephony
             elif idx < 3:
                 item['number_list'] = ip_tel
@@ -130,9 +128,19 @@ class GRAYDB:
         ip = str(ip)
         raw = self.browser.get(f'http://62.182.48.36/speed/index.php?ip1={ip}')
         try:
-            res = list(raw.soup.strings)[4].split('= ')[1]
+            res = list(raw.soup.stripped_strings)[-3].split('= ')[1]
         except IndexError:
-            res = raw.soup.body.string.strip()
+            res = "error"
+            log.error(raw.soup.body.string.strip())
+        return res
+
+    def get_billing_summary(self, contract_id: str):
+        """Get billing accounts with billing speed included"""
+        res = self.get_billing_accounts(contract_id)
+        if len(res['internet']['ip_list']) > 0:
+            # speed is the same for all ips, so, select first
+            res['internet']['speed'] = self.get_billing_speed(
+                res['internet']['ip_list'][0])
         return res
 
     def get_contract_by_ip(self, client_ip: str):

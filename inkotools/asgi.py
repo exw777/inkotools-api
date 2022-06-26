@@ -389,11 +389,11 @@ def gdb_get_client_by_contract_full(contract_id: ContractID, style: str = ''):
     if style == 'short':
         data = GDB.get_client_data(contract_id)
     elif style == 'billing':
-        data = GDB.get_billing_accounts(contract_id)
+        data = GDB.get_billing_summary(contract_id)
     # default: full
     else:
         data = GDB.get_client_data(contract_id)
-        data['billing_accounts'] = GDB.get_billing_accounts(contract_id)
+        data['billing_accounts'] = GDB.get_billing_summary(contract_id)
     meta = {"contract_id": contract_id}
     return fmt_result(data, meta)
 
