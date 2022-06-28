@@ -210,7 +210,9 @@ class GRAYDB:
             if c not in res['contact_list']:
                 res['contact_list'].append(c)
         # comment string from textarea
-        res['comment'] = d.find(attrs={'name': 'primechanie'}).string.strip()
+        res['comment'] = d.find(attrs={'name': 'primechanie'}).string
+        res['comment'] = res['comment'].strip(
+        ) if res['comment'] is not None else ''
         # search for terminated mark
         res['terminated'] = bool(
             raw.find('font', {'color': 'red', 'size': '2px'}))
