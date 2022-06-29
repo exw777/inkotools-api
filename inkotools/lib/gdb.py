@@ -127,11 +127,14 @@ class GRAYDB:
         """Get billing speed for ip address"""
         ip = str(ip)
         raw = self.browser.get(f'http://62.182.48.36/speed/index.php?ip1={ip}')
-        try:
-            res = list(raw.soup.stripped_strings)[-3].split('= ')[1]
-        except IndexError:
+        raw = raw.soup.get_text().strip()
+        rgx = r'esteblished= (\d+ Mbit/sec)'
+        r = re.findall(rgx, raw)
+        if len(r) == 0:
             res = "error"
-            log.error(raw.soup.body.string.strip())
+            log.error(raw)
+        else:
+            res = r[0]
         return res
 
     def get_billing_summary(self, contract_id: str):
