@@ -328,6 +328,52 @@ class GRAYDB:
                 res.append(ticket)
         return res
 
+    @_check_auth
+    def change_client_data(self, contract_id: str, data: dict):
+        """Change client data in gray database
+
+        Possible data: sw_ip, port, cable_length
+
+        Returns: bool"""
+        m_dict = {
+            'sw_ip': 'loyalnost',
+            'port': 'port',
+            'cable_length': 'dlina_cab',
+        }
+        client_id = self.get_internal_client_id(contract_id)
+        # get old user data from gray database
+        raw = self.browser.get(f'{self.baseurl}/index.php',
+                               params={"id_aabon": client_id})
+        raw = raw.soup
+        form = list(raw.find('input', {'name': 'fio'}).parents)[6]
+        fields = form.find_all(['input', 'select', 'textarea'])
+        old_data = {}
+        for item in fields:
+            if (not 'name' in item.attrs
+                    or item.attrs['name'] in ['zayavka', 'otvetstv']):
+                # skip submit button and ticket inputs
+                continue
+            key = item.attrs['name']
+            if item.name == 'input':
+                val = item.attrs['value'].encode("cp1251")
+            elif item.name == 'textarea':
+                val = item.text.encode("cp1251")
+            elif item.name == 'select':
+                val = item.option.get('value').encode("cp1251")
+            old_data[key] = val
+        # update data with provided values
+        new_data = old_data
+        for k, v in data.items():
+            if k in m_dict:
+                new_data[m_dict[k]] = v
+        # send data to gray database
+        raw = self.browser.post(f'{self.baseurl}/index.php', data=new_data)
+        res = list(raw.soup.stripped_strings)[-1] == 'Завершено успешно!'
+        if res:
+            log.debug(f'[{contract_id}] data changed: {data}')
+        else:
+            log.error(f'[{contract_id}] failed to change data: {data}')
+        return res
 
 ########################################################################
 # common functions
