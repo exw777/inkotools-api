@@ -249,7 +249,7 @@ class GRAYDB:
 
     @_check_auth
     def get_tickets(self):
-        """Get list of tickets"""
+        """Get list of user tickets"""
         tickets = []
         keys = ['ticket_id', 'contract_id', 'name', 'issue', 'address',
                 'contacts', 'date', 'creator']
@@ -311,6 +311,22 @@ class GRAYDB:
         else:
             log.error(f'[{user}] failed to comment [{contract_id}]')
             return {'error': 'Failed to add comment'}
+
+    @_check_auth
+    def search_ticket(self, contract_id: str, keywords: list = [],
+                      search_in_comments: bool = False,
+                      master: str = ''):
+        """Search ticket by keywords"""
+        res = []
+        client = self.get_client_data(contract_id)
+        kw = r'(?i)' + r'|'.join(keywords)
+        for ticket in client['tickets']:
+            if ((master == '' or ticket['master'] == master)
+                and (re.search(kw, ticket['issue'])
+                     or (search_in_comments
+                         and re.search(kw, ticket['raw_comments'])))):
+                res.append(ticket)
+        return res
 
 
 ########################################################################
