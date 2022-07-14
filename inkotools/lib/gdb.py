@@ -375,6 +375,21 @@ class GRAYDB:
             log.error(f'[{contract_id}] failed to change data: {data}')
         return res
 
+    @_check_auth
+    def terminate_contract(self, contract_id: str):
+        """Terminate contract in gray database"""
+        # check for services in billing
+        for k, v in self.get_billing_accounts(contract_id).items():
+            if 'services' in v.keys() and len(v['services']) > 0:
+                log.warning(
+                    f'Found services in {k} billing account, aborting.')
+                return False
+        # send termination request
+        self.browser.get(f'{self.baseurl}/index.php',
+                         params={"rastorg": contract_id})
+        return True
+
+
 ########################################################################
 # common functions
 
