@@ -333,11 +333,8 @@ class Switch:
                 prompt = '#'
 
             # set endline
-            if re.search(r'3627G|DXS-3600|3000|3200|3028|3026|3120',
-                         self.model):
+            if re.search(r'3627G|3000|3200|3028|3026|3120', self.model):
                 self._endline = '\n\r'
-            elif re.search(r'1210|QSW|LTP', self.model):
-                self._endline = '\r\n'
             elif re.search('3526', self.model):
                 self._endline = '\r\n\r'
             else:
