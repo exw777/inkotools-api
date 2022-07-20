@@ -680,25 +680,43 @@ class Switch:
         for port in ports:
             res = self.get_port_state(port=port)
             if isinstance(res, list):
-                result += self.get_port_state(port=port)
+                result += res
             else:
                 result.append(res)
 
         return result
 
-    def set_port_state(
-            self, port: int, state: bool,
-            comment: str = "", clear_comment: bool = False):
-        """Dummy function, need to rework"""
+    @_models(r'DES|DGS|QSW|^DXS((?!A1).)*$')
+    def set_port_state(self, port: int, state: bool, desc: str = None):
+        """Change port state and description
 
-        if comment == "" and not clear_comment:
-
-            result = self.send(template='port_state.j2',
-                               port=port, state=state)
-        else:
-            result = self.send(template='port_state.j2',
-                               port=port, state=state, comment=comment)
-        return result
+        Clear description if desc == ''
+        """
+        if re.search(r'DES|DGS', self.model):
+            s = 'enable' if state else 'disable'
+            if desc is None:
+                # skip description change
+                d = ''
+            elif desc == '':
+                # clear description
+                d = 'description ""' if self.model == 'DES-3526' else 'clear'
+            else:
+                # trim description to 32 symbols
+                desc = desc[:32]
+                # set quotes for most models
+                q = '' if re.search(r'3000|3120|3627|C1', self.model) else '"'
+                d = f'description {q}{desc}{q}'
+            cmd = f'conf ports {port} state {s} {d}'
+        elif re.search(r'QSW|DXS', self.model):
+            iface = '1/' if re.search('QSW', self.model) else '1/0/'
+            s = 'no shutdown' if state else 'shutdown'
+            cmd = ['conf t', f'interface ethernet {iface}{port}', s]
+            if desc is not None:
+                d = 'no description' if desc == '' else f'description {desc}'
+                cmd.append(d)
+            cmd += ['exit']*2
+        res = self.send(cmd)
+        return res
 
     @_models(r'DES-(?!3026)|DGS-(3000|1210)|QSW')
     def get_acl(self, port: int):
