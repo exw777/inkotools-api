@@ -713,6 +713,8 @@ class Switch:
                 cmd.append(d)
             cmd += ['exit']*2
         res = self.send(cmd)
+        if is_failed(res):
+            self.error(res)
         return res
 
     @_models(r'DES-(?!3026)|DGS-(3000|1210)|QSW')
@@ -722,8 +724,15 @@ class Switch:
             raw = self.send(f'sh am int eth 1/{port}')
             rgx = (r'Interface Ethernet1/(?P<port>\d{1,2})'
                    r'\s+am port\s+am ip-pool\s+'
-                   rf'(?P<ip>{RGX_IP})')
-            res = [dict_fmt_int(m.groupdict()) for m in re.finditer(rgx, raw)]
+                   rf'(?P<ip>{RGX_IP})\s+(?P<mask>\d+)')
+            res = re.search(rgx, raw)
+            if res is not None:
+                res = dict_fmt_int(res.groupdict())
+                # convert am count to mask (count<32)
+                res['mask'] = f"255.255.255.{256-res['mask']}"
+                res = [res]
+            else:
+                res = []
         # workaround for 1210, which is too slow when requesting config
         elif re.search('1210', self.model):
             rgx = (r'Access ID: (?P<access_id>\d+)\s*'
@@ -758,49 +767,84 @@ class Switch:
                         i['mask'] = '0.0.0.0'
         return res
 
-    def add_acl(self, port, ip):
-        """Add acl to switch port"""
-        try:
-            result = self.send(template='acl.j2', port=port, ip=ip)
-        except Exception as e:
-            self.log.error(f'add acl error: {e}')
-            return False
-        if re.search(r'ERROR|[Ff]ail', result):
-            self.log.error(f'failed to add acl {ip} port {port}')
-            return False
-        else:
-            return True
+    @_models(r'DES-(?!3026)|DGS-(3000|1210)|QSW')
+    def add_acl(self, port: int,  mode: str, ip: str,
+                mask: str = None, access_id: int = None):
+        """Add ip acl to switch port
+        mode: (permit|deny)
+        mask: default 255.255.255.255 for permit and 0.0.0.0 for deny
+              (not supported by 3526 and 3028G)
+        access_id: default is the same as port number
 
-    def delete_acl(self, port):
-        """Delete acl from switch port"""
-        try:
-            result = self.send(template='acl.j2', port=port, ip=None)
-        except Exception as e:
-            self.log.error(f'delete acl error: {e}')
-            return False
-        if re.search(r'ERROR|[Ff]ail', result):
-            self.log.error(f'failed to delete acl {ip} port {port}')
-            return False
-        else:
-            return True
-
-    def set_acl(self, port, ip):
-        """Set acl to switch port
-
-        Overwrites value if entry exists
+        For QSW only permit rule is available, access_id is ignored
         """
-        if self.get_acl(port=port):
-            self.delete_acl(port=port)
-        try:
-            result = self.send(template='acl.j2', port=port, ip=ip)
-        except Exception as e:
-            self.log.error(f'set acl error: {e}')
-            return False
-        if re.search(r'ERROR|[Ff]ail', result):
-            self.log.error(f'failed to set acl {ip} port {port}')
-            return False
+        # set default values
+        if mask is None:
+            mask = '255.255.255.255' if mode == 'permit' else '0.0.0.0'
+        elif re.search(r'3526|3028', self.model):
+            log.warning(
+                f'ACL mask not supported by {self.model}, will be ignored')
+        if access_id is None:
+            access_id = port
+
+        if re.search('QSW', self.model):
+            if mode != 'permit':
+                log.warning('Skipping deny QSW rule')
+                return
+            # calculate am ip and count from mask
+            net = netaddr.IPNetwork(f'{ip}/{mask}')
+            ip = net[0]
+            count = len(net)
+            cmd = ['conf t', f'int eth 1/{port}', 'am port',
+                   f'am ip-pool {ip} {count}', 'end']
         else:
-            return True
+            profile_id = 10 if mode == 'permit' else 20
+            if re.search(r'3200|3000', self.model):
+                mask_cmd = f'mask {mask} '
+            elif re.search('1210', self.model):
+                mask_cmd = f'source_ip_mask {mask} '
+            else:
+                mask_cmd = ''
+            cmd = (f'config access_profile profile_id {profile_id} '
+                   f'add access_id {access_id} ip source_ip {ip} {mask_cmd}'
+                   f'port {port} {mode}')
+
+        res = self.send(cmd)
+        if is_failed(res):
+            self.log.error(res)
+        return res
+
+    @_models(r'DES-(?!3026)|DGS-(3000|1210)|QSW')
+    def delete_acl(self, port: int,
+                   profile_id: int = None, access_id: int = None):
+        """Delete acl from switch port
+
+        Delete all rules if no profile/access id provided"""
+        if re.search('QSW', self.model):
+            cmd = ['conf t', f'int eth 1/{port}', ' no am port', 'end']
+        else:
+            cmd = []
+            acl_to_delete = []
+            if profile_id is not None and access_id is not None:
+                # single rule
+                acl_to_delete.append(
+                    {'profile_id': profile_id, 'access_id': access_id})
+            else:
+                # get all rules and select necessary
+                for acl in self.get_acl(port):
+                    if (acl['profile_id'] == profile_id
+                        or acl['access_id'] == access_id
+                            or access_id == profile_id):
+                        acl_to_delete.append(acl)
+            # delete rules
+            for acl in acl_to_delete:
+                cmd.append('config access_profile '
+                           f"profile_id {acl['profile_id']} "
+                           f"del access_id {acl['access_id']}")
+        res = self.send(cmd)
+        if is_failed(res):
+            self.log.error(res)
+        return res
 
     def get_vlan(self, vid=None):
         """Get tagged and untagged ports for vlan
@@ -1564,6 +1608,13 @@ def ipcalc(ip: str):
         'prefix': ip.prefixlen,
     }
     return data
+
+
+def is_failed(raw: str):
+    """Check string output for errors"""
+    res = True if re.search(
+        r'(?i)error|fail|lock|invalid', str(raw)) else False
+    return res
 
 
 async def batch_async(sw_list, func, external=False, max_workers=1024):
