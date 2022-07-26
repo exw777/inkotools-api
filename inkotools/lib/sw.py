@@ -846,7 +846,8 @@ class Switch:
             self.log.error(res)
         return res
 
-    def get_vlan(self, vid=None):
+    @_models(r'DES|DGS|QSW|^DXS((?!A1).)*$')
+    def get_vlan(self, vid: int = None):
         """Get tagged and untagged ports for vlan
 
         If vid is not defined, returns all vlans
@@ -858,40 +859,43 @@ class Switch:
                     'untagged': [int, ...]
                     }, ...]
         """
-        try:
-            result_raw = self.send(template='vlan.j2', vid=vid)
-        except Exception as e:
-            self.log.error(f'get vlan error: {e}')
-            return None
-        if not result_raw:
-            return None
-        result = []
+        cmd = 'sh vlan'
         if re.search('QSW', self.model):
-            result_raw = result_raw.replace('\x08', '').replace('-', '')
-            regex = (r'\n(?P<vid>\d+)\s+(?:.*Static.*?)'
-                     r'(?P<ports>(?:\s+Ethernet.*(?:\s+\r|$))+)')
-            for r in re.finditer(regex, result_raw):
-                vid = r.group('vid')
-                untagged = re.findall(r'Ethernet1/(\d+)(?:\s|$)\s*',
-                                      r.group('ports'))
-                tagged = re.findall(r'Ethernet1/(\d+)\(T\)(?:\s|$)\s*',
-                                    r.group('ports'))
-                result.append({'vid': int(vid),
-                               'tagged': tagged,
-                               'untagged': untagged})
+            vid_cmd = f' id {vid}'
+            rgx = (r'\n(?P<vid>\d+)\s+(?:.*Static.*?)'
+                   r'(?P<ports>(?:\s+Ethernet.*(?:\s+\r|$))+)')
+        elif re.search('DXS', self.model):
+            vid_cmd = f' {vid}'
+            rgx = (r'VLAN (?P<vid>\d+)(?s:.*?)'
+                   r'Tagged Member Ports +: (?P<tagged>[-/,\w]*)\s+'
+                   r'Untagged Member Ports +: (?P<untagged>[-/,\w]*)(?s:.*?)')
         else:
-            regex = (r'VID\s+:\s+(?P<vid>\d+)\s+(?s:.*?)'
-                     r'Tagged [Pp]orts\s+:\s+'
-                     r'(?P<tagged>[-,0-9]*)\s+(?s:.*?)'
-                     r'Untagged [Pp]orts\s+:\s+(?P<untagged>[-,0-9]*)')
-            for r in re.finditer(regex, result_raw):
-                vid = r.group('vid')
-                tagged = interval_to_list(r.group('tagged'))
-                untagged = interval_to_list(r.group('untagged'))
-                result.append({'vid': int(vid),
-                               'tagged': tagged,
-                               'untagged': untagged})
-        return result
+            vid_cmd = f' vlanid {vid}'
+            rgx = (r'VID\s+:\s+(?P<vid>\d+)\s+(?s:.*?)'
+                   r'Tagged [Pp]orts\s+:\s+'
+                   r'(?P<tagged>[-,0-9]*)\s+(?s:.*?)'
+                   r'Untagged [Pp]orts\s+:\s+(?P<untagged>[-,0-9]*)')
+        if vid is not None:
+            cmd += vid_cmd
+        raw = self.send(cmd)
+        # remove waste symbols from qsw raw
+        if re.search('QSW', self.model):
+            raw = raw.replace('\x08', '').replace('-', '')
+        res = [r.groupdict() for r in re.finditer(rgx, raw)]
+        for item in res:
+            item['vid'] = int(item['vid'])
+            # QSW workaround
+            if 'ports' in item.keys():
+                p = item.pop('ports')
+                item['tagged'] = list(map(int, re.findall(
+                    r'Ethernet1/(\d+)\(T\)(?:\s|$)\s*', p)))
+                item['untagged'] = list(map(int, re.findall(
+                    r'Ethernet1/(\d+)(?:\s|$)\s*', p)))
+            else:
+                # convert ports interval to list
+                for i in ['tagged', 'untagged']:
+                    item[i] = interval_to_list(item[i])
+        return res
 
     def get_vlan_list(self):
         """Return list of all vlans"""
@@ -1558,6 +1562,8 @@ def interval_to_list(s):
     """Convert 1-3,5,7-9 to [1,2,3,5,7,8,9]"""
     if not s:
         return []
+    # covert cisco cli interfaces to ports
+    s = re.sub(r'(?:eth)?1/(?:0/)?(\d+)', r'\1', s)
     ranges = list((a.split('-') for a in s.split(',')))
     l = []
     for r in ranges:
