@@ -10,7 +10,7 @@ from requests.exceptions import ConnectionError
 from typing import Optional
 
 # external imports
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import FastAPI, HTTPException, Body, Path
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ValidationError, validator
@@ -492,10 +492,24 @@ def switch_backup(sw_ip: IPv4Address):
     return fmt_result(result)
 
 
-@app.get('/sw/{sw_ip}/vlans/')
-def switch_get_vlans_list(sw_ip: IPv4Address):
+@app.get('/sw/{sw_ip}/vlan/')
+def switch_get_vlan_information(sw_ip: IPv4Address):
+    sw = get_sw_instance(sw_ip)
+    return fmt_result(sw.get_vlan())
+
+
+@app.get('/sw/{sw_ip}/vlan/list')
+def switch_get_vlan_list(sw_ip: IPv4Address):
     sw = get_sw_instance(sw_ip)
     return fmt_result(sw.get_vlan_list())
+
+
+@app.get('/sw/{sw_ip}/vlan/{vid}')
+def switch_get_vlan_information_for_vid(
+        sw_ip: IPv4Address,
+        vid: int = Path(gt=0, le=4094)):
+    sw = get_sw_instance(sw_ip)
+    return fmt_result(sw.get_vlan(vid))
 
 
 @app.get('/sw/{sw_ip}/multicast')
