@@ -473,7 +473,7 @@ class Switch:
             page_exp = {
                 self._prompt: 'break',
                 conf_t: 'break',
-                '(?i)all\W': 'a',
+                '(?i)[^-]all\W': 'a',
                 'More': ' ',
                 'Refresh': 'q',
                 '(?i)y/n]:': 'y\r',
@@ -952,7 +952,8 @@ class Switch:
         for vid in vid_list:
             self.delete_vlan(vid)
 
-    def get_vlan_port(self, port):
+    @_models(r'DES|DGS|QSW|^DXS((?!A1).)*$')
+    def get_vlan_port(self, port: int):
         """Get vlan information from port
 
         Returns: dict:
@@ -960,34 +961,40 @@ class Switch:
             {'port': int,
             'untagged': [int,...],
             'tagged': [int,...]}
-
-            {'error': e} - on exception
             """
-        try:
-            raw = self.send(template='vlan_port.j2', port=port)
-        except Exception as e:
-            self.log.error(f'get vlan port error: {e}')
-            return {'error': e}
-        tagged = []
         untagged = []
+        tagged = []
         if re.search('QSW', self.model):
-            rgx = (
-                r'Port VID :(?P<u>\d+)(?:\s+|$)'
-                r'(?:.*(?:Trunk|tag) allowed Vlan: (?P<t>[-;0-9]+))?'
-            )
+            raw = self.send(f'sh switchport interface ethernet 1/{port}')
+            rgx = (r'Port VID :(?P<u>\d+)(?:\s+|$)'
+                   r'(?:.*(?:Trunk|tag) allowed Vlan: (?P<t>[-;0-9]+))?')
             r = re.search(rgx, raw)
             untagged.append(int(r.group('u')))
             if r.group('t'):
                 t = r.group('t').replace(';', ',')
                 tagged = interval_to_list(t)
+        elif re.search('DXS', self.model):
+            raw = self.send(f'sh vlan interface ethernet 1/0/{port}')
+            rgx = (r'(?i)untagged [\w\s]+: (?P<u>[-,0-9]+)?(?s:.*?)'
+                   r'tagged [\w\s]+: (?P<t>[-,0-9\s]+\d)?')
+            r = re.search(rgx, raw)
+            untagged = interval_to_list(r.group('u'))
+            tagged = interval_to_list(r.group('t'))
+        elif self.model == 'DES-3026':
+            # 3026 has no command for port vlan information
+            # workaround is to recombine the result of get_vlan function
+            for vlan in self.get_vlan():
+                if port in vlan['tagged']:
+                    tagged.append(vlan['vid'])
+                elif port in vlan['untagged']:
+                    untagged.append(vlan['vid'])
         else:
+            raw = self.send(f'sh vlan port {port}')
             rgx = r'\s+(?P<vid>\d+)(?:\s+(?P<u>[-X])\s+(?P<t>[-X])).*'
             for r in re.finditer(rgx, raw):
-                if r.group('u') == 'X':
-                    untagged.append(int(r.group('vid')))
-                if r.group('t') == 'X':
-                    tagged.append(int(r.group('vid')))
-
+                for k, v in {'u': untagged, 't': tagged}.items():
+                    if r.group(k) == 'X':
+                        v.append(int(r.group('vid')))
         return {'port': port, 'untagged': untagged, 'tagged': tagged}
 
     def get_vlan_ports(self, ports=[]):
