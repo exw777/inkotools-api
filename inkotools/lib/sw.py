@@ -714,7 +714,10 @@ class Switch:
             cmd += ['exit']*2
         res = self.send(cmd)
         if is_failed(res):
-            self.error(res)
+            self.log.error(res)
+        else:
+            st = 'enabled' if state else 'disabled'
+            self.log.info(f'Port {port} {st}')
         return res
 
     @_models(r'DES-(?!3026)|DGS-(3000|1210)|QSW')
@@ -812,6 +815,8 @@ class Switch:
         res = self.send(cmd)
         if is_failed(res):
             self.log.error(res)
+        else:
+            self.log.info(f'Port {port} added ACL: {mode} {ip} {mask}')
         return res
 
     @_models(r'DES-(?!3026)|DGS-(3000|1210)|QSW')
@@ -844,6 +849,8 @@ class Switch:
         res = self.send(cmd)
         if is_failed(res):
             self.log.error(res)
+        else:
+            self.log.info(f'Port {port} removed ACL')
         return res
 
     @_models(r'DES|DGS|QSW|^DXS((?!A1).)*$')
@@ -863,7 +870,7 @@ class Switch:
         if re.search('QSW', self.model):
             vid_cmd = f' id {vid}'
             rgx = (r'\n(?P<vid>\d+)\s+(?:.*Static.*?)'
-                   r'(?P<ports>(?:\s+Ethernet.*(?:\s+\r|$))+)')
+                   r'(?P<ports>(?:\s*(?:Ethernet.*)*(?:\s+\r|$))+)')
         elif re.search('DXS', self.model):
             vid_cmd = f' {vid}'
             rgx = (r'VLAN (?P<vid>\d+)(?s:.*?)'
@@ -901,69 +908,44 @@ class Switch:
         """Return list of all vlans"""
         return [v['vid'] for v in self.get_vlan()]
 
-    def add_vlan(self, vid):
+    @_models(r'DES|DGS|QSW|^DXS((?!A1).)*$')
+    def add_vlan(self, vid: int):
         """Add new vlan to switch"""
-        vid = int(vid)
-        # check vid is valid
-        if not vid in range(1, 4095):
-            self.log.error(f'vid {vid} out of range')
-            return False
-        check_vlan = self.get_vlan(vid=vid)
-        if check_vlan:
-            self.log.error(f'vlan {vid} already exists')
-            return False
-        elif check_vlan == None:
-            self.log.error(f'vlan check failed (wrong model?)')
-            return False
-        try:
-            result = self.send(template='vlan.j2',
-                               vid=vid, action='add')
-        except Exception as e:
-            self.log.error(f'create vlan {vid} error: {e}')
-            return False
-        if not (re.search('Success', result) or result == ''):
-            self.log.error(f'create vlan {vid} failed: {result}')
-            return False
+        if len(self.get_vlan(vid)) > 0:
+            log.warning(f'VID {vid} already exists. Skipping.')
+            return
+        if re.search(r'QSW|DXS', self.model):
+            cmd = ['conf t', f'vlan {vid}', f'name {vid}', 'end']
         else:
-            self.log.info(f'created vlan {vid}')
-            return True
+            cmd = f'create vlan {vid} tag {vid}'
+        res = self.send(cmd)
+        if is_failed(res):
+            self.log.error(res)
+        else:
+            self.log.info(f'VID {vid} added')
+        return res
 
     def add_vlans(self, vid_list):
         """Add new vlans to switch"""
         for vid in vid_list:
             self.add_vlan(vid)
 
+    @_models(r'DES|DGS|QSW|^DXS((?!A1).)*$')
     def delete_vlan(self, vid, force=False):
         """Delete vlan from switch"""
-        vid = int(vid)
-        if vid == 1:
-            self.log.error('Cannot delete vid 1')
-        check_vlan = self.get_vlan(vid=vid)
-        if check_vlan == None:
-            self.log.error(f'vlan check failed (wrong model?)')
-            return False
-        elif check_vlan == []:
-            self.log.info(f'vlan {vid} does not exists. Skipping')
-            return True
-        if check_vlan[0]['untagged'] and not force:
-            self.log.error(
-                f'vlan {vid} is set untagged on ports: '
-                f"{check_vlan[0]['untagged']} Skipping. "
-                'Use `force=True` if you are really want to delete it.')
-            return False
-
-        try:
-            result = self.send(template='vlan.j2',
-                               vid=vid, action='delete')
-        except Exception as e:
-            self.log.error(f'delete vlan {vid} error: {e}')
-            return False
-        if not (re.search('Success', result) or result == ''):
-            self.log.error(f'delete vlan {vid} failed: {result}')
-            return False
+        if len(self.get_vlan(vid)) == 0:
+            log.warning(f'VID {vid} not found. Skipping.')
+            return
+        if re.search(r'QSW|DXS', self.model):
+            cmd = ['conf t', f'no vlan {vid}', 'end']
         else:
-            self.log.info(f'deleted vlan {vid}')
-            return True
+            cmd = f'delete vlan {vid}'
+        res = self.send(cmd)
+        if is_failed(res):
+            self.log.error(res)
+        else:
+            self.log.info(f'VID {vid} removed')
+        return res
 
     def delete_vlans(self, vid_list):
         """Delete vlans from switch"""
