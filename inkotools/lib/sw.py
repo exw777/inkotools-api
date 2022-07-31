@@ -877,7 +877,10 @@ class Switch:
                    r'Tagged Member Ports +: (?P<tagged>[-/,\w]*)\s+'
                    r'Untagged Member Ports +: (?P<untagged>[-/,\w]*)(?s:.*?)')
         else:
-            vid_cmd = f' vlanid {vid}'
+            if self.model == 'DES-3026':
+                vid_cmd = ' default' if vid == 1 else f' {vid}'
+            else:
+                vid_cmd = f' vlanid {vid}'
             rgx = (r'VID\s+:\s+(?P<vid>\d+)\s+(?s:.*?)'
                    r'Tagged [Pp]orts\s+:\s+'
                    r'(?P<tagged>[-,0-9]*)\s+(?s:.*?)'
@@ -956,46 +959,77 @@ class Switch:
     def get_vlan_port(self, port: int):
         """Get vlan information from port
 
-        Returns: dict:
+        Returns: dict with keys:
+            port: int
+            mode: str (access|trunk|hybrid)
+            native: int
+            untagged: [int,...]
+            tagged: [int,...]
+        """
+        res = {'port': port, 'mode': None, 'native': None,
+               'untagged': [], 'tagged': []}
 
-            {'port': int,
-            'untagged': [int,...],
-            'tagged': [int,...]}
-            """
-        untagged = []
-        tagged = []
         if re.search('QSW', self.model):
             raw = self.send(f'sh switchport interface ethernet 1/{port}')
-            rgx = (r'Port VID :(?P<u>\d+)(?:\s+|$)'
-                   r'(?:.*(?:Trunk|tag) allowed Vlan: (?P<t>[-;0-9]+))?')
-            r = re.search(rgx, raw)
-            untagged.append(int(r.group('u')))
-            if r.group('t'):
-                t = r.group('t').replace(';', ',')
-                tagged = interval_to_list(t)
+            rgx = (
+                r'Ethernet1/(?P<port>\d+)(?s:.*?)'
+                r'Mode :(?P<mode>\w+)(?:\s+)'
+                r'Port VID :(?P<native>\d+)(?:\s+|$)'
+                r'(?:(?:Trunk|Hybrid tag) allowed Vlan: (?P<tagged>[-;0-9]+))?'
+                r'(?:\s*Hybrid untag allowed Vlan: (?P<untagged>[-;0-9]+))?'
+            )
+            res = re.search(rgx, raw).groupdict()
+
         elif re.search('DXS', self.model):
             raw = self.send(f'sh vlan interface ethernet 1/0/{port}')
-            rgx = (r'(?i)untagged [\w\s]+: (?P<u>[-,0-9]+)?(?s:.*?)'
-                   r'tagged [\w\s]+: (?P<t>[-,0-9\s]+\d)?')
-            r = re.search(rgx, raw)
-            untagged = interval_to_list(r.group('u'))
-            tagged = interval_to_list(r.group('t'))
+            rgx = (
+                r'(?i)eth1/0/(?P<port>\d+)(?s:.*?)'
+                r'mode +: (?P<mode>\w+)(?:\s+)'
+                r'(?:native|access) [\w ]+: (?P<native>\d+)(?:.*)?'
+                r'(?:\s*hybrid untagged [\w ]+: (?P<untagged>[-,0-9]+)?)?'
+                r'(?:\s*(?:trunk|.* tagged) [\w ]+: (?P<tagged>[-,0-9\s]+\d))?'
+            )
+            res = re.search(rgx, raw).groupdict()
+
         elif self.model == 'DES-3026':
             # 3026 has no command for port vlan information
             # workaround is to recombine the result of get_vlan function
             for vlan in self.get_vlan():
                 if port in vlan['tagged']:
-                    tagged.append(vlan['vid'])
+                    res['tagged'].append(vlan['vid'])
                 elif port in vlan['untagged']:
-                    untagged.append(vlan['vid'])
+                    res['untagged'].append(vlan['vid'])
+
         else:
             raw = self.send(f'sh vlan port {port}')
-            rgx = r'\s+(?P<vid>\d+)(?:\s+(?P<u>[-X])\s+(?P<t>[-X])).*'
+            rgx = (r'\s+(?P<vid>\d+)'
+                   r'(?:\s+(?P<untagged>[-X])\s+(?P<tagged>[-X])).*')
             for r in re.finditer(rgx, raw):
-                for k, v in {'u': untagged, 't': tagged}.items():
+                for k in ['untagged', 'tagged']:
                     if r.group(k) == 'X':
-                        v.append(int(r.group('vid')))
-        return {'port': port, 'untagged': untagged, 'tagged': tagged}
+                        res[k].append(int(r.group('vid')))
+
+        if res['mode'] is None:
+            # workaround for d-link cli
+            res['mode'] = 'hybrid'
+        else:
+            res['mode'] = res['mode'].lower()
+
+        if res['native'] is None:
+            if len(res['untagged']) > 0:
+                res['native'] = res['untagged'][0]
+        else:
+            res['native'] = int(res['native'])
+
+        # convert port intervals to lists
+        for k in ['untagged', 'tagged']:
+            if not isinstance(res[k], list):
+                res[k] = interval_to_list(res[k])
+
+        if len(res['untagged']) == 0 and res['mode'] == 'access':
+            res['untagged'].append(res['native'])
+
+        return res
 
     def get_vlan_ports(self, ports=[]):
         """Get vlan on several ports
@@ -1011,138 +1045,164 @@ class Switch:
 
         return result
 
-    def add_vlan_port(self, port, vid, tag=False,
-                      force_create=False,
-                      force_replace=False,
-                      unsafe=False):
+    @_models(r'DES|DGS|QSW|^DXS((?!A1).)*$')
+    def add_vlan_port(self, port: int, vid: int,
+                      tagged: bool = False,
+                      force_create: bool = False,
+                      force_replace: bool = False):
         """Add tagged/untagged vlan to port
 
-        port   (int)  - switch port
-        vid    (int)  - vlan id
-        tag   (bool)  - if True, set vlan tagged. Default False (untagged)
+        port    (int) - switch port
+        vid     (int) - vlan id
+        tagged (bool) - if True, set vlan tagged (default is untagged)
 
-        force flags (default: False):
+        force bool flags (default: False):
 
-        force_create  - adding non-existing vlan,
-        force_replace - replacing untagged vlan,
-        unsafe        - skipping some safety checks."""
+        force_create  - add non-existing vlan
+        force_replace - replace untagged vlan
+        """
 
-        port = int(port)
-        vid = int(vid)
-        # get current vlans from port for some checks
-        cur_vlans = self.get_vlan_port(port=port)
-        if not cur_vlans:
-            self.log.error(f'failed to get vlans from port {port}')
-            return False
-        # check if vid exists on switch
+        # check vlan existence and create if needed
         if not vid in self.get_vlan_list():
-            if not force_create:
-                self.log.error(
-                    f'vlan {vid} does not exist. '
-                    'Create it first or use `force_create=True` parameter.')
-                return False
+            self.log.warning(f'vlan {vid} does not exist')
+            if force_create:
+                self.add_vlan(vid)
             else:
-                # force create vlan before adding to port
-                if not self.add_vlan(vid=vid):
-                    self.log.error(f'force create vlan {vid} failed.')
-                    return False
-        # check if vlan already added
-        if (
-            (vid in cur_vlans['untagged'] and not tag)
-            or (vid in cur_vlans['tagged'] and tag)
-        ):
-            self.log.info(
-                f'vlan {vid} already set on port {port}. Skipping.')
-            return True
-        # check adding vid 1 to access port
-        if vid == 1 and port in self.access_ports and not unsafe:
-            self.log.error(
-                'VID 1 on access port is probably not what you wanted. '
-                'Use `unsafe=True` parameter to skip this check.')
-            return False
-        # check adding untagged vlan to transit port
-        if not tag and port in self.transit_ports and vid != 1 and not unsafe:
-            self.log.error(
-                'Untagged vlan on transit port is probably not what you '
-                'wanted. Use `unsafe=True` parameter to skip this check.')
-            return False
-        # check overlapping untagged ports
-        if not tag and len(cur_vlans['untagged']) > 0:
-            # q-tech workaround (vid 1 when no access vlan on port)
-            if re.search('QSW', self.model) and cur_vlans['untagged'][0] == 1:
-                pass
-            elif not force_replace:
                 self.log.error(
-                    f'Untagged vlan overlapping on port {port}. '
-                    f"Remove vlan {cur_vlans['untagged']} first, "
-                    'or use `force_replace=True` parameter to replace')
-                return False
-            else:
-                # if force - delete old vlan before adding new
-                if not self.delete_vlan_port(
-                        port=port, vid=cur_vlans['untagged'][0]):
-                    self.log.error(
-                        f'failed to replace vlan {vid} on port {port}')
-                    return False
-        # send commands to switch
-        if tag:
-            action = 'tag'
-        else:
-            action = 'untag'
-        try:
-            result = self.send(template='vlan_port.j2',
-                               port=port, vid=vid, action=action)
-        except Exception as e:
-            self.log.error(
-                f'add {action} vlan {vid} on port {port} error: {e}')
-            return False
-        if not (re.search(r'[Ss]uccess', result) or result == ''):
-            self.log.error(
-                f'add {action} vlan {vid} on port {port} failed: {result}')
-            return False
-        else:
-            self.log.info(f'{action} vlan {vid} added on port {port}')
-            return True
+                    f'Cannot add non-existent vlan {vid} on port {port}. '
+                    'Use `force_create = True` to create it before adding.')
+                return
 
-    def delete_vlan_port(self, port, vid, unsafe=False):
-        """Delete vlan from port
-
-        unsafe - skip check of vid 1 deleting from transit ports"""
-
-        port = int(port)
-        vid = int(vid)
         # get current vlans from port for some checks
-        cur_vlans = self.get_vlan_port(port=port)
-        if not cur_vlans:
-            self.log.error(f'failed to get vlans from port {port}')
-            return False
-        # check if vlan already deleted
-        if not (vid in cur_vlans['untagged'] or vid in cur_vlans['tagged']):
-            self.log.info(
-                f'vlan {vid} not set on port {port}. Skipping.')
-            return True
-        # check deleting vid 1 from transit port
-        if vid == 1 and port in self.transit_ports and not unsafe:
-            self.log.error(
-                'Attention! Removing vid 1 from transit port may cause '
-                'disconnection from switch and make it unavailable! '
-                'Use `unsafe=True` parameter if you really want to do this.')
-            return False
-        # send commands
-        try:
-            result = self.send(template='vlan_port.j2',
-                               port=port, vid=vid, action='delete')
-        except Exception as e:
-            self.log.error(
-                f'delete vlan {vid} port {port} error: {e}')
-            return False
-        if not (re.search(r'[Ss]uccess', result) or result == ''):
-            self.log.error(
-                f'delete vlan {vid} port {port} failed: {result}')
-            return False
+        cur_vlans = self.get_vlan_port(port)
+
+        # check if vlan already added
+        if ((vid in cur_vlans['untagged'] and not tagged)
+                or (vid in cur_vlans['tagged'] and tagged)):
+            self.log.info(f'vlan {vid} already set on port {port}. Skipping.')
+            return
+
+        # check overlapping untagged ports
+        if not tagged and len(cur_vlans['untagged']) > 0:
+            # cisco cli workaround
+            # (vid 1 is set if there is no access vlan on port)
+            if re.search(r'QSW|DXS', self.model) and cur_vlans['native'] == 1:
+                force_replace = True
+            if not force_replace:
+                self.log.error(
+                    f'Cannot add untagged vlan {vid} on port {port}, '
+                    f"already set vlan {cur_vlans['untagged']}. "
+                    'Use `force_replace = True` to replace it.')
+                return
+            else:
+                # remove old vlan from port before adding new
+                self.delete_vlan_port(port=port, vid=cur_vlans['untagged'][0])
+
+        if re.search(r'QSW|DXS', self.model):
+            # templates for handling differences between QSW and DXS
+            hybrid_add = 'switchport hybrid allowed vlan add '
+            hybrid_remove = 'switchport hybrid allowed vlan remove '
+            if re.search('QSW', self.model):
+                interface = f'1/{port}'
+                hybrid_add += '{vid} {tag}'
+                hybrid_remove += '{vid} {tag}'
+            else:
+                interface = f'1/0/{port}'
+                hybrid_add += '{tag} {vid}'
+                hybrid_remove += '{vid}'
+            cmd = ['conf t', f'int eth {interface}']
+            if cur_vlans['mode'] == 'access':
+                if tagged:
+                    # change mode to hybrid
+                    self.log.warning(f'Changing port {port} mode to hybrid')
+                    cmd.append('switchport mode hybrid')
+                    # restore old native/untagged vlan
+                    cmd.append('switchport hybrid native vlan ' +
+                               f"{cur_vlans['native']}")
+                    cmd.append(hybrid_remove.format(vid=1,
+                                                    tag='untag'))
+                    cmd.append(hybrid_add.format(vid=cur_vlans['native'],
+                                                 tag='untag'))
+                    # add new tagged vlan
+                    cmd.append(hybrid_add.format(vid=vid, tag='tag'))
+                else:
+                    cmd.append(f'switchport access vlan {vid}')
+            elif cur_vlans['mode'] == 'trunk':
+                if tagged:
+                    cmd.append(f'switchport trunk allowed vlan add {vid}')
+                else:
+                    cmd.append(f'switchport trunk native vlan {vid}')
+            elif cur_vlans['mode'] == 'hybrid':
+                t = 'tag' if tagged else 'untag'
+                cmd.append(hybrid_add.format(vid=vid, tag=t))
+                if not tagged:
+                    cmd.append(f'switchport hybrid native vlan {vid}')
+            cmd.append('end')
+
         else:
-            self.log.info(f'vlan {vid} deleted from port {port}')
-            return True
+            if re.search(r'3026|3627G', self.model):
+                vid_cmd = 'default' if vid == 1 else vid
+            else:
+                vid_cmd = f'vlanid {vid}'
+            cmd = f'conf vlan {vid_cmd} add '
+            if not tagged:
+                cmd += 'un'
+            cmd += f'tagged {port}'
+
+        res = self.send(cmd)
+        if is_failed(res):
+            self.log.error(res)
+        else:
+            msg = 'Tagged' if tagged else 'Untagged'
+            msg += f' vlan {vid} added to port {port}'
+            self.log.info(msg)
+        return res
+
+    @_models(r'DES|DGS|QSW|^DXS((?!A1).)*$')
+    def delete_vlan_port(self, port: int, vid: int):
+        """Delete vlan from port"""
+
+        cur_vlans = self.get_vlan_port(port=port)
+        if not vid in cur_vlans['untagged'] + cur_vlans['tagged']:
+            self.log.info(f'vlan {vid} not set on port {port}. Skipping.')
+            return
+
+        tagged = True if vid in cur_vlans['tagged'] else False
+
+        if re.search(r'QSW|DXS', self.model):
+            interface = '1/' if self.model == 'QSW-2800-28T-AC' else '1/0/'
+            interface += str(port)
+            mode = cur_vlans['mode']
+            cmd = ['conf t', f'int eth {interface}']
+            if mode == 'access':
+                cmd.append('no switchport access vlan')
+            else:
+                if vid == cur_vlans['native'] and vid != 1:
+                    self.log.warning(
+                        f'native vlan {vid} will be replaced by vid 1')
+                    cmd.append(f'no switchport {mode} native vlan')
+                if mode == 'hybrid' and self.model == 'QSW-2800-28T-AC':
+                    t = 'tag' if tagged else 'untag'
+                else:
+                    t = ''
+                cmd.append(f'switchport {mode} allowed vlan remove {vid} {t}')
+            cmd.append('end')
+
+        else:
+            if re.search(r'3026|3627G', self.model):
+                vid_cmd = 'default' if vid == 1 else vid
+            else:
+                vid_cmd = f'vlanid {vid}'
+            cmd = f'conf vlan {vid_cmd} delete {port}'
+
+        res = self.send(cmd)
+        if is_failed(res):
+            self.log.error(res)
+        else:
+            msg = 'Tagged' if tagged else 'Untagged'
+            msg += f' vlan {vid} removed from port {port}'
+            self.log.info(msg)
+        return res
 
     def add_vlans_ports(self, ports, vid_list,
                         force_untagged=False, force_create=False):
@@ -1553,6 +1613,8 @@ def interval_to_list(s):
         return []
     # covert cisco cli interfaces to ports
     s = re.sub(r'(?:eth)?1/(?:0/)?(\d+)', r'\1', s)
+    # qsw ranges are separated by `;`
+    s = s.replace(';', ',')
     ranges = list((a.split('-') for a in s.split(',')))
     l = []
     for r in ranges:
