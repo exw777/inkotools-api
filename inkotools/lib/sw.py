@@ -1220,7 +1220,7 @@ class Switch:
         Existing untagged vlan on port will be replaced by tagged.
         """
 
-        # conver args to lists
+        # convert args to lists
         if isinstance(ports, int):
             ports = [ports]
         elif isinstance(ports, str):
@@ -1258,7 +1258,7 @@ class Switch:
 
         """
 
-        # conver args to lists
+        # convert args to lists
         if isinstance(ports, int):
             ports = [ports]
         elif isinstance(ports, str):
@@ -1617,6 +1617,84 @@ class Switch:
         # convert values to the same form
         res = list(map(lambda s: re.sub(r'[- ~]+', ' - ', s), res))
 
+        return res
+
+    @_models(r'DES-(?!3026)|DGS-(3000|1210)')
+    def get_port_mcast_profile(self, port: int):
+        """Get list of mcast limit profiles on port"""
+        raw = self.send(f'show limited_multicast_addr ports {port}')
+        if re.search(r'3028|1210', self.model):
+            rgx = r'(?:Profile Id:|Permit) ?(?P<id>[-,0-9]*)'
+            m = re.search(rgx, raw).groupdict()
+            res = interval_to_list(m['id'])
+        else:
+            rgx = r'\d+ +(?P<id>\d+) +(?s:.*?)'
+            res = list(map(int, re.findall(rgx, raw)))
+        return res
+
+    @_models(r'DES-(?!3026)|DGS-(3000|1210)')
+    def set_port_mcast_profile(self, port: int, profile_id: int):
+        """Set mcast limit profile by id
+
+         removes all other profiles
+         """
+
+        profiles = self.get_port_mcast_profile(port)
+        # check and remove old profiles
+        if profile_id in profiles:
+            profiles.remove(profile_id)
+            if len(profiles) > 0:
+                # remove otherother profiles
+                for i in profiles:
+                    self.delete_port_mcast_profile(port, i)
+            self.log.info(
+                f'profile {profile_id} already set on port {port}. Skipping.')
+            return
+        if len(profiles) > 0:
+            # remove old profiles
+            self.delete_port_mcast_profile(port)
+
+        if self.model == 'DES-3526':
+            cmd = [(f'config limited_multicast_addr ports {port} '
+                    f'add multicast_range {profile_id}'),
+                   (f'config limited_multicast_addr ports {port} '
+                    'access permit state enable')]
+        else:
+            cmd = (f'config limited_multicast_addr ports {port} '
+                   f'add profile_id {profile_id}')
+
+        res = self.send(cmd)
+        if is_failed(res):
+            self.log.error(res)
+        else:
+            self.log.info(f'Port {port} mcast profile {profile_id}')
+        return res
+
+    @_models(r'DES-(?!3026)|DGS-(3000|1210)')
+    def delete_port_mcast_profile(self, port: int, profile_id=None):
+        """Remove mcast limit profile from port
+
+        if `profile_id` is ommited, removes all mcast profiles from port
+        """
+
+        profiles = self.get_port_mcast_profile(port)
+        if profile_id is None:
+            del_list = profiles
+        elif profile_id not in profiles:
+            self.log.info(
+                f'profile {profile_id} not found on port {port}. Skipping.')
+            return
+        else:
+            del_list = [profile_id]
+        cmd = []
+        for i in del_list:
+            cmd.append(f'config limited_multicast_addr ports {port} '
+                       f'delete profile_id {i}')
+        res = self.send(cmd)
+        if is_failed(res):
+            self.log.error(res)
+        else:
+            self.log.info(f'Profile {del_list} removed from port {port}')
         return res
 
     @_models(r'DES-(?!3026)|DGS-(3000|1210)|QSW')
