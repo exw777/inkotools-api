@@ -1036,7 +1036,13 @@ class Switch:
 
         ports - if ommited, all ports are used"""
 
-        if not ports:
+        # convert args to list
+        if isinstance(ports, int):
+            ports = [ports]
+        elif isinstance(ports, str):
+            ports = interval_to_list(ports)
+
+        if len(ports) == 0:
             ports = self.access_ports + self.transit_ports
 
         result = []
@@ -1204,85 +1210,82 @@ class Switch:
             self.log.info(msg)
         return res
 
-    def add_vlans_ports(self, ports, vid_list,
-                        force_untagged=False, force_create=False):
-        """Add tagged vlans to ports
+    @_models(r'DES|DGS|QSW|^DXS((?!A1).)*$')
+    def add_vlans_ports(self, ports, vid_list):
+        """Add list of tagged vlans to list of ports
 
-        ports    (list of int) - list of ports
-        vid_list (list of int) - list of vlan id
-        force_untagged  (bool) - replace existing untagged to tagged.
-        force_create    (bool) - create vlan if not exists."""
+        `ports` and `vid_list`can be also string interval or single int
 
-        # if only one port in args
+        Missing vlan will be created.
+        Existing untagged vlan on port will be replaced by tagged.
+        """
+
+        # conver args to lists
         if isinstance(ports, int):
             ports = [ports]
-        # if ports are in dlink interval format
         elif isinstance(ports, str):
             ports = interval_to_list(ports)
+        if isinstance(vid_list, int):
+            vid_list = [vid_list]
+        elif isinstance(vid_list, str):
+            vid_list = interval_to_list(vid_list)
+
+        for port in ports:
+            cur_vlans = self.get_vlan_port(port)
+            for vid in vid_list:
+                vid = int(vid)
+                if vid in cur_vlans['untagged']:
+                    self.log.warning(
+                        f'Found untagged {vid} on port {port}. Removing.')
+                    self.delete_vlan_port(port, vid)
+                if vid in cur_vlans['tagged']:
+                    self.log.info(
+                        f'Found tagged {vid} on port {port}. Skipping.')
+                else:
+                    self.add_vlan_port(port, vid,
+                                       tagged=True, force_create=True)
+
+    @_models(r'DES|DGS|QSW|^DXS((?!A1).)*$')
+    def delete_vlans_ports(self, ports, vid_list: list = [],
+                           force_untagged: bool = False):
+        """Delete list of vlans from list of ports
+
+        `ports` and `vid_list`can be also string interval or single int
+         if `vid_list` is ommited, all vlans will be deleted from port
+
+        by default only tagged vlans will be deleted,
+        use `force_untagged = True` to delete also untagged vlan
+
+        """
+
+        # conver args to lists
+        if isinstance(ports, int):
+            ports = [ports]
+        elif isinstance(ports, str):
+            ports = interval_to_list(ports)
+        if isinstance(vid_list, int):
+            vid_list = [vid_list]
+        elif isinstance(vid_list, str):
+            vid_list = interval_to_list(vid_list)
 
         for port in ports:
             # get current vlans from port for some checks
             cur_vlans = self.get_vlan_port(port=port)
-            if not cur_vlans:
-                self.log.error(f'failed to get vlans from port {port}')
-                # skip current port on error
-                continue
+            # delete all vlans on empty list
+            if len(vid_list) == 0:
+                vid_list = cur_vlans['tagged']+cur_vlans['untagged']
             # vlan processing
             for vid in vid_list:
                 vid = int(vid)
                 if vid in cur_vlans['untagged'] and not force_untagged:
                     self.log.warning(
-                        f'vlan {vid} already set untagged on port {port}. '
-                        'Skipping. Use `force_untagged=True` to replace.')
-                elif vid in cur_vlans['tagged']:
-                    self.log.info(
-                        f'vlan {vid} already set on port {port}. Skipping')
-                else:
-                    self.add_vlan_port(port=port, vid=vid, tag=True,
-                                       force_create=force_create)
-
-    def delete_vlans_ports(self, ports, vid_list=[], force_untagged=False):
-        """Delete tagged vlans from ports
-
-        ports           - list of ports or one port in int
-        vid_list        - if ommited, all vlans will be deleted from port
-        force_untagged  - delete also untagged vlan (default: False)
-        """
-
-        # if only one port in args
-        if isinstance(ports, int):
-            ports = [ports]
-        # if ports are in dlink interval format
-        elif isinstance(ports, str):
-            ports = interval_to_list(ports)
-
-        for port in ports:
-            # get current vlans from port for some checks
-            cur_vlans = self.get_vlan_port(port=port)
-            if not cur_vlans:
-                self.log.error(f'failed to get vlans from port {port}')
-                # skip current port on error
-                continue
-            # delete all vlans on empty list
-            if vid_list:
-                del_list = vid_list
-            else:
-                del_list = cur_vlans['tagged']
-                if cur_vlans['untagged']:
-                    del_list.append(cur_vlans['untagged'])
-
-            # vlan processing
-            for vid in del_list:
-                vid = int(vid)
-                if vid == cur_vlans['untagged'] and not force_untagged:
-                    self.log.warning(
                         f'port {port} vlan {vid} is untagged. '
-                        'Skipping. Use `force_untagged=True` to delete.')
+                        'Skipping. Use `force_untagged = True` to delete.')
                 elif not vid in cur_vlans['tagged']:
                     self.log.info(
-                        f'no vlan {vid} on port {port}. Skipping')
+                        f'vlan {vid} not found on port {port}. Skipping.')
                 else:
-                    self.delete_vlan_port(port=port, vid=vid)
+                    self.delete_vlan_port(port, vid)
 
     @_models(r'DES-(?!3026)|DGS-(3000|1210)|QSW')
     def check_cable(self, port: int):
@@ -1669,8 +1672,8 @@ def ipcalc(ip: str):
 
 def is_failed(raw: str):
     """Check string output for errors"""
-    res = True if re.search(
-        r'(?i)error|fail|lock|invalid', str(raw)) else False
+    rgx = r'(?i)error|fail|lock|invalid|possible completions'
+    res = True if re.search(rgx, str(raw)) else False
     return res
 
 
