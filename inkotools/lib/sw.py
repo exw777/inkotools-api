@@ -1559,20 +1559,26 @@ class Switch:
         res = re.search(rgx, raw).groupdict()
         return dict_fmt_int(res)
 
-    @_models(r'DES-(?!3026)|DGS-(3000|1210)')
+    @_models(r'DES-(?!3026)|DGS-(3000|1210)|QSW')
     def get_port_mcast_groups(self, port: int):
         """Get list of multicast groups on port"""
-        if re.search(r'1210|3000|c1', self.model):
-            raw = self.send(f'show igmp_snooping group ports {port}')
+        if re.search('QSW', self.model):
+            raw = self.send(
+                f'sh ip igmp snooping vlan 1500 groups int eth 1/{port}')
+            rgx = r'(?P<group>(?:\d+\.){3}\d+)'
+            res = re.findall(rgx, raw)
         else:
-            raw = self.send('show igmp_snooping group vlan 1500')
-        rgx = (r'(?P<group>(?:\d+\.){3}\d+)(?s:.*?)'
-               r'(?i:member[ \w]*: *)(?P<ports>\d+(?:[- ,0-9]*\d)?)')
-        res = []
-        # add only the groups, that contain selected port
-        for m in re.finditer(rgx, raw):
-            if port in interval_to_list(m['ports']):
-                res.append(m['group'])
+            if re.search(r'1210|3000|c1', self.model):
+                raw = self.send(f'show igmp_snooping group ports {port}')
+            else:
+                raw = self.send('show igmp_snooping group vlan 1500')
+            rgx = (r'(?P<group>(?:\d+\.){3}\d+)(?s:.*?)'
+                   r'(?i:member[ \w]*: *)(?P<ports>\d+(?:[- ,0-9]*\d)?)')
+            res = []
+            # add only the groups, that contain selected port
+            for m in re.finditer(rgx, raw):
+                if port in interval_to_list(m['ports']):
+                    res.append(m['group'])
         return res
 
     @_models(r'DES-(?!3026)|DGS-(3000|1210)')
