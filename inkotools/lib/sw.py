@@ -1525,16 +1525,29 @@ class Switch:
         res = [dict_fmt_int(m.groupdict()) for m in re.finditer(rgx, raw)]
         return res
 
-    @_models(r'DES-(?!3026)|DGS-(3000|1210)')
+    @_models(r'DES-(?!3026)|DGS-(3000|1210)|QSW')
     def get_mcast_ports(self):
         """Get lists of source and member multicast ports"""
-        raw = self.send('show igmp_snooping multicast_vlan')
-        rgx = (r'[^ ](?:Untagged )?Member(?:\(Untagged\))? [Pp]orts +: ?'
-               r'(?P<member>[-,0-9]+)?(?s:.*)'
-               r'[^ ]Source (?:\(Tagged\))?[Pp]orts +: ?'
-               r'(?P<source>[-,0-9]+)?')
-        d = re.search(rgx, raw).groupdict()
-        return dict(zip(d.keys(), map(interval_to_list, d.values())))
+        if self.model == 'QSW-2800-28T-AC':
+            # get config for each port and search within it
+            raw = self.send('sh run | begin Interface')
+            rgx = r'Interface Ethernet1/(?P<port>\d+)(?s:(?P<cfg>.*?))!'
+            member = []
+            for m in re.finditer(rgx, raw):
+                if re.search('switchport association multicast-vlan 1500',
+                             m['cfg']):
+                    member.append(int(m['port']))
+            # hardcode: transit ports as source for qsw
+            res = {'member': member, 'source': self.transit_ports}
+        else:
+            raw = self.send('show igmp_snooping multicast_vlan')
+            rgx = (r'[^ ](?:Untagged )?Member(?:\(Untagged\))? [Pp]orts +: ?'
+                   r'(?P<member>[-,0-9]+)?(?s:.*)'
+                   r'[^ ]Source (?:\(Tagged\))?[Pp]orts +: ?'
+                   r'(?P<source>[-,0-9]+)?')
+            d = re.search(rgx, raw).groupdict()
+            res = dict(zip(d.keys(), map(interval_to_list, d.values())))
+        return res
 
     @_models(r'DES|DGS')
     def get_port_bandwidth(self, port: int):
@@ -1586,6 +1599,36 @@ class Switch:
         # convert values to the same form
         res = list(map(lambda s: re.sub(r'[- ~]+', ' - ', s), res))
 
+        return res
+
+    @_models(r'DES-(?!3026)|DGS-(3000|1210)|QSW')
+    def set_mcast_member(self, port: int, state: bool):
+        """Add/delete multicast member port"""
+        action = 'add' if state else 'delete'
+        members = self.get_mcast_ports()['member']
+        if state and port in members or not state and not port in members:
+            self.log.info(f'{action} port {port} already done. Skipping.')
+            return
+        if self.model == 'QSW-2800-28T-AC':
+            no = '' if state else 'no'
+            cmd = ['conf t',
+                   f'int eth 1/{port}',
+                   f'{no} switchport association multicast-vlan 1500',
+                   'end']
+        elif self.model == 'DES-3526':
+            if state:
+                members.append(port)
+            else:
+                members.remove(port)
+            ports = ','.join(map(str, members))
+            cmd = f'conf igmp_sn multicast_vlan 1500 member {ports}'
+        else:
+            cmd = f'conf igmp_sn multicast_vlan 1500 {action} member {port}'
+        res = self.send(cmd)
+        if is_failed(res):
+            self.log.error(res)
+        else:
+            self.log.info(f'{action} port {port}')
         return res
 
 ########################################################################
