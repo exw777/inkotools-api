@@ -1559,6 +1559,18 @@ class Switch:
         res = re.search(rgx, raw).groupdict()
         return dict_fmt_int(res)
 
+    @_models(r'DES|DGS')
+    def set_port_bandwidth(self, port: int, limit: int):
+        """Set port bandwidth in megabits"""
+        val = 1024*int(limit) if limit > 0 else 'no_limit'
+        cmd = f'config bandwidth_control {port} rx_rate {val} tx_rate {val}'
+        res = self.send(cmd)
+        if is_failed(res):
+            self.log.error(res)
+        else:
+            self.log.info(f'Port {port} limited to {limit} Mbit/s')
+        return res
+
     @_models(r'DES-(?!3026)|DGS-(3000|1210)|QSW')
     def get_port_mcast_groups(self, port: int):
         """Get list of multicast groups on port"""
