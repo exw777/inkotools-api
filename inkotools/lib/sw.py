@@ -717,7 +717,19 @@ class Switch:
             self.log.error(res)
         else:
             st = 'enabled' if state else 'disabled'
-            self.log.info(f'Port {port} {st}')
+            self.log.info(f'Port {port} {st} {d}')
+        return res
+
+    @_models(r'DES|DGS-(3000|1210)|QSW')
+    def set_port_auto_speed(self, port: int):
+        """Restore port speed autonegotiation"""
+        if self.model == 'QSW-2800-28T-AC':
+            cmd = ['conf t', f'int eth 1/{port}', 'speed-duplex auto', 'end']
+        else:
+            cmd = f'conf ports {port} speed auto'
+        res = self.send(cmd)
+        if is_failed(res):
+            self.log.error(res)
         return res
 
     @_models(r'DES-(?!3026)|DGS-(3000|1210)|QSW')
@@ -846,6 +858,9 @@ class Switch:
                 cmd.append('config access_profile '
                            f"profile_id {acl['profile_id']} "
                            f"del access_id {acl['access_id']}")
+        if len(cmd) == 0:
+            self.log.info('No rules to delete')
+            return
         res = self.send(cmd)
         if is_failed(res):
             self.log.error(res)
@@ -1281,7 +1296,7 @@ class Switch:
                     self.log.warning(
                         f'port {port} vlan {vid} is untagged. '
                         'Skipping. Use `force_untagged = True` to delete.')
-                elif not vid in cur_vlans['tagged']:
+                elif not vid in cur_vlans['tagged']+cur_vlans['untagged']:
                     self.log.info(
                         f'vlan {vid} not found on port {port}. Skipping.')
                 else:
@@ -1690,6 +1705,9 @@ class Switch:
         for i in del_list:
             cmd.append(f'config limited_multicast_addr ports {port} '
                        f'delete profile_id {i}')
+        if len(cmd) == 0:
+            self.log.info('No profiles to delete')
+            return
         res = self.send(cmd)
         if is_failed(res):
             self.log.error(res)
@@ -1726,6 +1744,32 @@ class Switch:
         else:
             self.log.info(f'{action} port {port}')
         return res
+
+    @_models(r'DES|DGS-(3000|1210)|QSW')
+    def wipe_port(self, port: int, desc: str = ''):
+        """Wipe port config and set description"""
+
+        # disable port and set description
+        self.set_port_state(port, False, desc)
+        # set autonegotiation
+        self.set_port_auto_speed(port)
+        # remove all vlans
+        self.delete_vlans_ports(port, force_untagged=True)
+
+        if self.model != 'DES-3026':
+            # remove all acl rules
+            self.delete_acl(port)
+            # remove multicast vlan
+            self.set_mcast_member(port, False)
+
+            if self.model != 'QSW-2800-28T-AC':
+                # remove all multicast filters
+                self.delete_port_mcast_profile(port)
+
+        if re.search('DGS', self.model):
+            # restore bandwidth
+            self.set_port_bandwidth(port, 100)
+
 
 ########################################################################
 # common functions
