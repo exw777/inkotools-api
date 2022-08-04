@@ -193,7 +193,7 @@ class GRAYDB:
         d = list(raw.find('input', {'name': 'fio'}).parents)[6]
         # iterate through the form inputs
         for key, val in m_dict.items():
-            res[key] = d.find(attrs={'name': val}).get('value')
+            res[key] = d.find(attrs={'name': val}).get('value').strip()
         # get city and street from first (selected) option in select
         m_dict = {
             'city': 'gorod',
@@ -205,7 +205,7 @@ class GRAYDB:
         # generate contact list
         res['contact_list'] = []
         for i in range(1, 4):
-            c = d.find(attrs={'name': f'cont{i}'}).get('value')
+            c = d.find(attrs={'name': f'cont{i}'}).get('value').strip()
             # skip empty strings and legacy values
             if c in ['', '0']:
                 continue
