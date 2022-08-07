@@ -745,6 +745,7 @@ class Switch:
                 res = dict_fmt_int(res.groupdict())
                 # convert am count to mask (count<32)
                 res['mask'] = f"255.255.255.{256-res['mask']}"
+                res['mode'] = 'permit'
                 res = [res]
             else:
                 res = []
