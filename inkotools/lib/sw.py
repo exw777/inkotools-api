@@ -181,10 +181,10 @@ class Switch:
         if self.ip not in NETS:
             if re.search('DXS', self.model):
                 raw = self.send('sh ip interface vlan 1')
-                rgx = r'(?P<ip>(?:\d+\.){3}\d+)'
+                rgx = rf'(?P<ip>{RGX_IP})'
             elif re.search('DGS', self.model):
                 raw = self.send('sh sw')
-                rgx = r'IP Address +: (?P<ip>(?:\d+\.){3}\d+)'
+                rgx = rf'IP Address +: (?P<ip>{RGX_IP})'
             self.ip = netaddr.IPAddress(re.search(rgx, raw).group('ip'))
             self.log = logging.getLogger(str(self.ip))
 
@@ -1505,7 +1505,7 @@ class Switch:
                 cmd += mac
             elif vid is not None:
                 cmd += f'int vlan {vid}'
-            rgx = (r'(?P<ip>(?:\d+\.){3}\d+) +'
+            rgx = (rf'(?P<ip>{RGX_IP}) +'
                    r'(?P<mac>(?:\w\w-){5}\w\w) +'
                    r'vlan(?P<vid>\d+)')
 
@@ -1518,7 +1518,7 @@ class Switch:
             elif vid is not None:
                 cmd += f'ipif {vid}'
             rgx = (r'(?P<vid>\w+) +'
-                   r'(?P<ip>(?:\d+\.){3}\d+) +'
+                   rf'(?P<ip>{RGX_IP}) +'
                    r'(?P<mac>(?!(?:FF-){5}FF)(?:\w\w-){5}\w\w) +')
 
         raw = self.send(cmd)
@@ -1536,7 +1536,7 @@ class Switch:
     def get_aliases(self):
         """Get list of l3 interfaces ip and vid"""
         raw = self.send('sh ip interface brief | exclude down')
-        rgx = r'vlan(?P<vid>\d+) +(?P<alias>(?:\d+\.){3}\d+)'
+        rgx = rf'vlan(?P<vid>\d+) +(?P<alias>{RGX_IP})'
         res = [dict_fmt_int(m.groupdict()) for m in re.finditer(rgx, raw)]
         return res
 
@@ -1592,14 +1592,14 @@ class Switch:
         if re.search('QSW', self.model):
             raw = self.send(
                 f'sh ip igmp snooping vlan 1500 groups int eth 1/{port}')
-            rgx = r'(?P<group>(?:\d+\.){3}\d+)'
+            rgx = rf'(?P<group>{RGX_IP})'
             res = re.findall(rgx, raw)
         else:
             if re.search(r'1210|3000|c1', self.model):
                 raw = self.send(f'show igmp_snooping group ports {port}')
             else:
                 raw = self.send('show igmp_snooping group vlan 1500')
-            rgx = (r'(?P<group>(?:\d+\.){3}\d+)(?s:.*?)'
+            rgx = (rf'(?P<group>{RGX_IP})(?s:.*?)'
                    r'(?i:member[ \w]*: *)(?P<ports>\d+(?:[- ,0-9]*\d)?)')
             res = []
             # add only the groups, that contain selected port
