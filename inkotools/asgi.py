@@ -315,6 +315,21 @@ def database_add_switch(sw_ip: IPv4Address):
             status_code=500, detail=f'failed to add {sw_ip}')
 
 
+@app.get('/freeip/{vid}/')
+def get_free_ip_by_vid(vid: int):
+    res = {'ip': GDB.get_free_ip(vid)}
+    return fmt_result(res)
+
+
+@app.get('/freepip/{net_ip}/')
+def get_free_pip_by_subnet_ip(net_ip: IPv4Address):
+    c = ipcalc(net_ip)
+    subnet = f"{c['gateway']}/{c['prefix']}"
+    ip = GDB.get_free_pip(subnet)
+    res = ipcalc(ip)
+    return fmt_result(res)
+
+
 class ContractID(str):
     """Contract id field type"""
 

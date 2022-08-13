@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 
 # external imports
 import mechanicalsoup
+from netaddr import IPNetwork
 
 # local imports
 
@@ -157,8 +158,64 @@ class GRAYDB:
             contract_id = row.find('td').string.strip()
             if client_ip in self.get_client_ip_list(contract_id):
                 return contract_id
-
         raise self.NotFoundError()
+
+    def get_free_ip(self, vid: int, return_list: bool = False):
+        """Find free ip in billing"""
+        base = f'192.168.{vid}.'
+        res = []
+        # search in ip range splitting them by 10
+        for i in range(1, 13):
+            expr = base+str(i)
+            raw = self.browser.post(f'{self.baseurl}/poisk_test.php',
+                                    data={"ip": expr, "go99": 1})
+            cnt = len(raw.soup.select('tbody tr'))
+            # cnt < 11 --> there are free ips
+            # cnt > 11 and i in [1,2] --> 1xx and 2xx ips workaround
+            if cnt != 11:
+                for j in ['']+list(range(0, 10)):
+                    ip = expr+str(j)
+                    host = int(ip.split('.')[3])
+                    if host == 1:
+                        continue
+                    if host > 128:
+                        break
+                    try:
+                        self.get_contract_by_ip(ip)
+                    except self.NotFoundError:
+                        log.debug(f'found: {ip}')
+                        if return_list:
+                            res.append(ip)
+                        else:
+                            return ip
+        if len(res) > 0:
+            return res
+        raise self.NotFoundError(f'No free ip addresses found in vlan {vid}')
+
+    def get_vlan_ip_count(self, vid: int):
+        """Get ip count in vlan from billing"""
+        expr = f'192.168.{vid}.'
+        raw = self.browser.post(f'{self.baseurl}/poisk_test.php',
+                                data={"ip": expr, "go99": 1})
+        cnt = len(raw.soup.select('tbody tr'))
+        return cnt
+
+    def get_free_pip(self, subnet: str, return_list: bool = False):
+        """Find free public ip in billing"""
+        res = []
+        subnet = IPNetwork(subnet)
+        for ip in list(map(str, subnet.iter_hosts()))[1::]:
+            try:
+                self.get_contract_by_ip(ip)
+            except self.NotFoundError:
+                log.debug(f'found: {ip}')
+                if return_list:
+                    res.append(ip)
+                else:
+                    return ip
+        if len(res) > 0:
+            return res
+        raise self.NotFoundError(f'No free ip addresses found for {subnet}')
 
     def get_internal_client_id(self, contract_id: str):
         """Get internal client id in gray database"""
