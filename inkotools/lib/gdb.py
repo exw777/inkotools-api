@@ -375,6 +375,8 @@ class GRAYDB:
                       master: str = ''):
         """Search ticket by keywords"""
         res = []
+        if not isinstance(keywords, list):
+            keywords = [keywords]
         client = self.get_client_data(contract_id)
         kw = r'(?i)' + r'|'.join(keywords)
         for ticket in client['tickets']:
