@@ -442,8 +442,8 @@ class GRAYDB:
                     f'Found services in {k} billing account, aborting.')
                 return False
         # send termination request
-        self.browser.get(f'{self.baseurl}/index.php',
-                         params={"rastorg": contract_id})
+        self.browser.post(f'{self.baseurl}/index.php',
+                          data={"rastorg": contract_id})
         return True
 
 
