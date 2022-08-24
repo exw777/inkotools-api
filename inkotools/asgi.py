@@ -543,6 +543,12 @@ def switch_get_ports_list(sw_ip: IPv4Address):
     return fmt_result(data)
 
 
+@app.get('/sw/{sw_ip}/freeports/')
+def switch_get_free_ports_list(sw_ip: IPv4Address):
+    sw = get_sw_instance(sw_ip)
+    return fmt_result(sw.free_ports())
+
+
 @app.get('/sw/{sw_ip}/ports/{port_id}/')
 def switch_get_port_summary(sw_ip: IPv4Address, port_id: int):
     sw = get_sw_instance(sw_ip)

@@ -1772,6 +1772,36 @@ class Switch:
             # restore bandwidth
             self.set_port_bandwidth(port, 100)
 
+    @_models(r'DES|DGS-(3000|1210)|QSW')
+    def free_ports(self):
+        """Search for free ports"""
+        res = []
+        for p in self.get_ports_state(self.access_ports):
+            # port must be disabled
+            if p['state']:
+                continue
+            # port must not be broken (check by desc)
+            rgx = r'(?i)bad|sgorel|lbd|loop|broken'
+            if p['desc'] is not None and re.search(rgx, p['desc']):
+                continue
+            # port must not have vlans
+            v = self.get_vlan_port(p['port'])
+            if len(v['tagged']+v['untagged']) > 0:
+                continue
+            # check cable length
+            if p['type'] == 'C':
+                try:
+                    cable = self.check_cable(p['port'])
+                except self.ModelError:
+                    cable = None
+                if isinstance(cable, list):
+                    p['cable'] = cable
+                else:
+                    p['status'] = cable
+            # add port to result
+            res.append(p)
+        return res
+
 
 ########################################################################
 # common functions
