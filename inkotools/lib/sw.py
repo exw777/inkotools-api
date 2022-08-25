@@ -1752,13 +1752,6 @@ class Switch:
     def wipe_port(self, port: int, desc: str = ''):
         """Wipe port config and set description"""
 
-        # disable port and set description
-        self.set_port_state(port, False, desc)
-        # set autonegotiation
-        self.set_port_auto_speed(port)
-        # remove all vlans
-        self.delete_vlans_ports(port, force_untagged=True)
-
         if self.model != 'DES-3026':
             # remove all acl rules
             self.delete_acl(port)
@@ -1768,6 +1761,13 @@ class Switch:
             if self.model != 'QSW-2800-28T-AC':
                 # remove all multicast filters
                 self.delete_port_mcast_profile(port)
+
+        # disable port and set description
+        self.set_port_state(port, False, desc)
+        # set autonegotiation
+        self.set_port_auto_speed(port)
+        # remove all vlans
+        self.delete_vlans_ports(port, force_untagged=True)
 
         if re.search('DGS', self.model):
             # restore bandwidth
