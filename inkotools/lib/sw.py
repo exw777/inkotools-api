@@ -1704,9 +1704,10 @@ class Switch:
             del_list = [profile_id]
         cmd = []
         p = 'multicast_range' if self.model == 'DES-3526' else 'profile_id'
+        v = 'ipv4' if '1210' in self.model else ''
         for i in del_list:
             cmd.append(f'config limited_multicast_addr ports {port} '
-                       f'delete {p} {i}')
+                       f'{v} delete {p} {i}')
         if len(cmd) == 0:
             self.log.info('No profiles to delete')
             return
