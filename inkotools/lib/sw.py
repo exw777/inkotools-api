@@ -1386,11 +1386,12 @@ class Switch:
 
         return res
 
-    @_models(r'DES|DGS')
+    @_models(r'DES|DGS|QSW')
     def clear_port_counters(self, port: int):
         """Clear counters on port"""
-        result = self.send(f'clear counters ports {port}')
-        if re.search(r'[Ss]uccess', result):
+        iface = 'int eth 1/' if re.search('QSW', self.model) else 'ports '
+        result = self.send(f'clear counters {iface}{port}')
+        if not is_failed(result):
             return 'Success'
 
     @_models(r'DES|DGS|QSW|^DXS((?!A1).)*$')
