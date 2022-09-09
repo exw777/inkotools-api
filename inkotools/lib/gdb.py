@@ -156,7 +156,14 @@ class GRAYDB:
         # and check if contract's ip is the searched ip
         for row in raw.soup.select('tbody tr'):
             contract_id = row.find('td').string.strip()
-            if client_ip in self.get_client_ip_list(contract_id):
+            # workaround for billing random fails
+            for i in range(3):
+                try:
+                    client_ips = self.get_client_ip_list(contract_id)
+                    break
+                except self.NotFoundError:
+                    log.warning(f'Failed! Attempt: {i+1}/3')
+            if client_ip in client_ips:
                 return contract_id
         raise self.NotFoundError()
 
