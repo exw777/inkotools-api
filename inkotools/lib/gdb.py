@@ -141,7 +141,7 @@ class GRAYDB:
     def get_billing_summary(self, contract_id: str):
         """Get billing accounts with billing speed included"""
         res = self.get_billing_accounts(contract_id)
-        if len(res['internet']['ip_list']) > 0:
+        if res['internet'] and len(res['internet']['ip_list']) > 0:
             # speed is the same for all ips, so, select first
             res['internet']['speed'] = self.get_billing_speed(
                 res['internet']['ip_list'][0])
@@ -165,7 +165,7 @@ class GRAYDB:
                     log.warning(f'Failed! Attempt: {i+1}/3')
             if client_ip in client_ips:
                 return contract_id
-        raise self.NotFoundError()
+        raise self.NotFoundError(f"Client with ip '{client_ip}' not found")
 
     def get_free_ip(self, vid: int, return_list: bool = False):
         """Find free ip in billing"""
@@ -230,7 +230,7 @@ class GRAYDB:
                                 data={"dogovor": contract_id, "startt": 1})
         f = raw.soup.find('input', {'name': 'id_aabon'})
         if f is None:
-            raise self.NotFoundError()
+            raise self.NotFoundError(f"Contract '{contract_id}' not found")
         res = int(f.get('value'))
         return res
 
