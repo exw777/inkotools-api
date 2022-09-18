@@ -419,6 +419,12 @@ def gdb_get_client_by_ip_full(client_ip: IPv4Address, style: str = ''):
     return gdb_get_client_by_contract_full(contract_id, style)
 
 
+@app.get('/gdb/checkip/{client_ip}/')
+def gdb_get_contract_id_by_ip_full(client_ip: IPv4Address):
+    res = GDB.get_contract_by_ip(client_ip)
+    return fmt_result(res)
+
+
 @app.get('/ipcalc/{ip}/')
 def get_ipcalc_summary(ip: IPv4Address):
     data = ipcalc(ip)
