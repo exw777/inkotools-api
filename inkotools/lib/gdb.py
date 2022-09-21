@@ -6,7 +6,12 @@ import html
 import logging
 import re
 from datetime import datetime
-from zoneinfo import ZoneInfo
+
+# python <3.9 workaround
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    from backports.zoneinfo import ZoneInfo
 
 # external imports
 import mechanicalsoup
