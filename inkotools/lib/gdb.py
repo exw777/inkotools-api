@@ -267,6 +267,8 @@ class GRAYDB:
         m_dict = {
             'city': 'gorod',
             'street': 'ulitsa',
+            'entrance': 'podezd',
+            'floor': 'etaj',
         }
         for key, val in m_dict.items():
             res[key] = d.find(
