@@ -77,7 +77,7 @@ def client_terminate(contract_id: str, ignore_acl=False):
         sw = Switch(sw_ip)
         try:
             for r in sw.get_acl(port):
-                if r['mode'] == 'permit':
+                if r['mode'] == 'permit' and r['ip'] != '0.0.0.0':
                     acl_ip += map(str, IPNetwork(f"{r['ip']}/{r['mask']}"))
         except Switch.ModelError:
             # skip 3026
