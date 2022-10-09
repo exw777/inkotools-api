@@ -22,6 +22,12 @@ proxy_port: 1080
 # custom telnet command
 telnet_cmd: telnet
 
+# elk options
+elastic_api:
+  url: http://127.0.0.1:9200
+  key_id: ''
+  key: ''
+
 # service vlans/subnets restricted for client use
 SERVICE_VLANS:
   - 1

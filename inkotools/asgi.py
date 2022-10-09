@@ -10,6 +10,7 @@ from requests.exceptions import ConnectionError
 from typing import Optional
 
 # external imports
+from elasticsearch import AsyncElasticsearch
 from fastapi import FastAPI, HTTPException, Body, Path
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -40,6 +41,11 @@ GDB_USERS = {}
 # TODO: move this part to pool
 # gdb account for common use
 GDB = GRAYDB(COMMON['GRAYDB_URL'], SECRETS['gray_database'])
+
+# elastic api
+ES = AsyncElasticsearch(
+    COMMON['elastic_api']['url'],
+    api_key=(COMMON['elastic_api']['key_id'], COMMON['elastic_api']['key']))
 
 
 def get_sw_instance(sw_ip):
@@ -652,3 +658,25 @@ def switch_get_port_mcast_filters(sw_ip: IPv4Address, port_id: int):
     validate_port(sw, port_id)
     data = sw.get_port_mcast_filters(port=port_id)
     return fmt_result(data)
+
+
+@app.get('/sw/{sw_ip}/ports/{port_id}/linkdowncount')
+async def switch_get_port_linkdown_count(
+        sw_ip: IPv4Address, port_id: int, interval: str = '24h'):
+    # sw = get_sw_instance(sw_ip)
+    # validate_port(sw, port_id)
+
+    res = await ES.count(
+        query={
+            "bool": {
+                "must": [
+                    {"term": {"host.ip": str(sw_ip)}},
+                    {"match_phrase": {"message": f"port {port_id} link down"}}
+                ],
+                "filter": [
+                    {"range": {"@timestamp": {"gte": f"now-{interval}"}}}
+                ]
+            }
+        }
+    )
+    return fmt_result(res['count'])
