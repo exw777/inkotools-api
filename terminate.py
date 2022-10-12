@@ -62,14 +62,14 @@ def client_terminate(contract_id: str, ignore_acl=False):
         ticket_comment += 'Порт не указан. '
         remove_config = False
     elif not re.match(rf'^{RGX_IP}$', sw_ip):
-        log.warning(f'[{contract_id}] Wrong switch ip: {sw_ip}')
-        remove_config = False
+        log.error(f'[{contract_id}] Wrong switch ip: {sw_ip}')
+        return
     else:
         try:
             port = int(port)
         except ValueError:
-            log.warning(f'[{contract_id}] Wrong switch port: {port}')
-            remove_config = False
+            log.error(f'[{contract_id}] Wrong switch port: {port}')
+            return
 
     # check port acl
     if remove_config:
@@ -101,6 +101,7 @@ def client_terminate(contract_id: str, ignore_acl=False):
         else:
             # log.warning(f'[{contract_id}] Empty ACL')
             # TODO: show port state and config to user and ask for termination
+            # TODO: check for already removed config
             if not ignore_acl:
                 log.error(f'[{contract_id}] Empty ACL')
                 return
@@ -118,6 +119,7 @@ def client_terminate(contract_id: str, ignore_acl=False):
     if client_data['terminated']:
         terminated = True
         log.warning(f'[{contract_id}] Already terminated')
+        ticket_comment += 'Договор уже расторгнут.'
     else:
         terminated = GDB.terminate_contract(contract_id)
         if terminated:
