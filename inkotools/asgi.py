@@ -11,6 +11,7 @@ from typing import Optional
 
 # external imports
 from elasticsearch import AsyncElasticsearch
+from elasticsearch import AuthenticationException as elkAuthError
 from fastapi import FastAPI, HTTPException, Body, Path
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -129,6 +130,19 @@ def fmt_result(data, meta=None):
     return {"data": data}
 
 
+def fmt_log_search(search):
+    """Format elastic search output"""
+    res = []
+    for item in search['hits']['hits']:
+        src = item['_source']
+        res.append({
+            "timestamp": src['@timestamp'],
+            "log_level": src['log']['level'],
+            "message": src['message'],
+        })
+    return res
+
+
 def validate_port(sw: Switch, port_id: int):
     """Check if port is in switch ports range"""
     ports_range = sw.access_ports + sw.transit_ports
@@ -158,6 +172,12 @@ async def graydb_404_exception_handler(request, exc):
 async def graydb_creds_exception_handler(request, exc):
     """Gray database credentials error handler"""
     return JSONResponse(content={"detail": str(exc)}, status_code=401)
+
+
+@app.exception_handler(elkAuthError)
+async def elk_auth_exception_handler(request, exc):
+    """Elastic auth error handler"""
+    return JSONResponse(content={"detail": str(exc)}, status_code=500)
 
 
 @app.exception_handler(ConnectionError)
@@ -663,15 +683,13 @@ def switch_get_port_mcast_filters(sw_ip: IPv4Address, port_id: int):
 @app.get('/sw/{sw_ip}/ports/{port_id}/linkdowncount')
 async def switch_get_port_linkdown_count(
         sw_ip: IPv4Address, port_id: int, interval: str = '24h'):
-    # sw = get_sw_instance(sw_ip)
-    # validate_port(sw, port_id)
-
     res = await ES.count(
         query={
             "bool": {
                 "must": [
                     {"term": {"host.ip": str(sw_ip)}},
-                    {"match_phrase": {"message": f"port {port_id} link down"}}
+                    {"term": {"interface.id": port_id}},
+                    {"match_phrase": {"message": f"link down"}}
                 ],
                 "filter": [
                     {"range": {"@timestamp": {"gte": f"now-{interval}"}}}
@@ -680,3 +698,32 @@ async def switch_get_port_linkdown_count(
         }
     )
     return fmt_result(res['count'])
+
+
+@app.get('/sw/{sw_ip}/log')
+async def switch_get_last_log(sw_ip: IPv4Address,
+                              offset: int = 0, limit: int = 10):
+    search = await ES.search(
+        from_=offset, size=limit, sort={"@timestamp": {"order": "desc"}},
+        query={"term": {"host.ip": {"value": str(sw_ip)}}}
+    )
+    res = fmt_log_search(search)
+    return fmt_result(res)
+
+
+@app.get('/sw/{sw_ip}/ports/{port_id}/log')
+async def switch_get_port_last_log(
+        sw_ip: IPv4Address, port_id: int, offset: int = 0, limit: int = 10):
+    search = await ES.search(
+        from_=offset, size=limit, sort={"@timestamp": {"order": "desc"}},
+        query={
+            "bool": {
+                "must": [
+                    {"term": {"host.ip": str(sw_ip)}},
+                    {"term": {"interface.id": port_id}},
+                ],
+            }
+        }
+    )
+    res = fmt_log_search(search)
+    return fmt_result(res)
