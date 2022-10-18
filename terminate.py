@@ -74,7 +74,11 @@ def client_terminate(contract_id: str, ignore_acl=False):
     # check port acl
     if remove_config:
         acl_ip = []
-        sw = Switch(sw_ip)
+        try:
+            sw = Switch(sw_ip)
+        except Switch.UnavailableError:
+            log.error(f'[{contract_id}] Switch is unavailable: {sw_ip}')
+            return
         try:
             for r in sw.get_acl(port):
                 if r['mode'] == 'permit' and r['ip'] != '0.0.0.0':
