@@ -241,13 +241,19 @@ class Switch:
     def is_alive(self):
         """Check if switch is available
 
-        check availability: arp --> icmp --> telnet
+        check availability: session --> arp --> icmp --> telnet
         arpreq is faster than icmp, but only works when
         there is a corresponding entry in the local arp table
         first two check are skipping in proxy mode
         """
+        # established telnet session check
+        if hasattr(self, '_connection') and self._connection.isalive():
+            log.debug('Alive: established telnet session')
+            return True
+        # arp and icmp check
         if not COMMON['proxy_mode']:
             if arpreq(self.ip) or ping(self.ip).is_alive:
+                log.debug('Alive: arp or ping')
                 return True
         # third check is via tcp port 80 (web) and 23 (telnet)
         for p in [80, 23]:
@@ -262,6 +268,7 @@ class Switch:
             try:
                 if s.connect_ex((str(self.ip), p)) == 0:
                     s.close()
+                    log.debug(f'Alive: {p} port')
                     return True
             except (socks.ProxyError, socket.timeout):
                 pass
