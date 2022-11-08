@@ -1790,7 +1790,7 @@ class Switch:
             if p['state']:
                 continue
             # port must not be broken (check by desc)
-            rgx = r'(?i)bad|sgorel|lbd|loop|broken'
+            rgx = r'(?i)bad|sgorel|lbd|loop|broken|dead'
             if p['desc'] is not None and re.search(rgx, p['desc']):
                 continue
             # port must not have vlans
