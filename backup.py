@@ -13,13 +13,6 @@ from inkotools.lib.cfg import COMMON
 
 log = logging.getLogger()
 
-db = DB(COMMON['DB_FILE'])
-
-git_dir = COMMON['backup_path']
-git_author = COMMON['git_author']
-
-failed_backup = []
-
 
 def is_failed(res):
     return isinstance(res, dict) and 'error' in res
@@ -45,17 +38,17 @@ def backup_and_save(sw):
         sw.log.error(f'Saving exception: {e}')
 
 
-def main():
-    # backup and save swithces
-    log.setLevel(logging.ERROR)
-    asyncio.run(batch_async(db.ip_list(), backup_and_save, external=True))
-
-    log.setLevel(logging.INFO)
-
+def do_backup(sw_list=[]):
+    failed_backup = []
+    asyncio.run(batch_async(sw_list, backup_and_save, external=True))
     if len(failed_backup) > 0:
-        log.warning(f'Failed backup: {failed_backup}')
+        log.warning(f'Failed switches: {failed_backup}')
+    return failed_backup
 
-    # commit and push changes
+
+def do_git(failed_backup):
+    git_dir = COMMON['backup_path']
+    git_author = COMMON['git_author']
     try:
         params = {'shell': True, 'check': True,
                   'text': True, 'capture_output': True}
@@ -83,6 +76,18 @@ def main():
         subprocess.run(f'git -C {git_dir} push', **params)
     except subprocess.CalledProcessError as e:
         log.error(e)
+
+
+def main():
+    # backup and save swithces
+    db = DB(COMMON['DB_FILE'])
+    sw_list = db.ip_list()
+    log.setLevel(logging.ERROR)
+    failed_backup = do_backup(sw_list)
+
+    # commit and push changes
+    log.setLevel(logging.INFO)
+    do_git(failed_backup)
 
 
 if __name__ == '__main__':
