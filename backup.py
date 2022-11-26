@@ -18,16 +18,27 @@ db = DB(COMMON['DB_FILE'])
 git_dir = COMMON['backup_path']
 git_author = COMMON['git_author']
 
+failed_backup = []
+
+
+def is_failed(res):
+    return isinstance(res, dict) and 'error' in res
+
 
 def backup_and_save(sw):
     try:
-        sw.backup()
+        res = sw.backup()
     except sw.ModelError:
         pass
     except Exception as e:
         sw.log.error(f'Backup exception: {e}')
+    else:
+        # if backup is failed try again one more time
+        if is_failed(res) and is_failed(sw.backup()):
+            failed_backup.append(str(sw.ip))
+
     try:
-        sw.save()
+        res = sw.save()
     except sw.ModelError:
         pass
     except Exception as e:
@@ -39,8 +50,12 @@ def main():
     log.setLevel(logging.ERROR)
     asyncio.run(batch_async(db.ip_list(), backup_and_save, external=True))
 
-    # commit and push changes
     log.setLevel(logging.INFO)
+
+    if len(failed_backup) > 0:
+        log.warning(f'Failed backup: {failed_backup}')
+
+    # commit and push changes
     try:
         params = {'shell': True, 'check': True,
                   'text': True, 'capture_output': True}
@@ -49,7 +64,18 @@ def main():
         if r.stdout == '':
             log.info('No changes - nothing to commit')
             exit()
-        [log.info(l) for l in r.stdout.strip().split('\n')]
+        commit_files = r.stdout.strip().split('\n')
+        rgx = r' (?P<file>(?P<ip>[\d.]+)\.\w+)'
+        for line in commit_files:
+            r = re.search(rgx, line)
+            # restore files with failed backup
+            if r['ip'] in failed_backup:
+                log.warning(f"Restored {r['file']}")
+                subprocess.run(
+                    (f'git -C {git_dir} restore '
+                     f"--staged --worktree {r['file']}"), **params)
+            else:
+                log.info(f"Commited {r['file']}")
         subprocess.run(
             (f'git -C {git_dir} commit '
              f"-m \"Automatic backup at {time.strftime('%F %T')}\" "
