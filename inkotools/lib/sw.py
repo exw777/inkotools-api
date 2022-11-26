@@ -475,8 +475,6 @@ class Switch:
             # [y/n] (ignore case) - saving in cisco cli
             # ]? DXS-3600 confirm tftp backup
             # TODO: remove hardcode
-            # GP3600 enter backup filename
-            backup_path = f"{COMMON['backup_dir']}/{self.ip}.cfg\r"
             page_exp = {
                 self._prompt: 'break',
                 conf_t: 'break',
@@ -484,7 +482,6 @@ class Switch:
                 'More': ' ',
                 'Refresh': 'q',
                 '(?i)y/n]:': 'y\r',
-                'Destination file name\[startup-config]\?': backup_path,
                 ']\?': '\r',
             }
             cmd_out = ''
@@ -514,17 +511,49 @@ class Switch:
         Returns: string result.
         """
         server = f"192.168.{self.ip.words[2]}.{COMMON['backup_host']}"
-        path = COMMON['backup_dir']
+        filename = ''
+        # add path if exists
+        if COMMON['backup_dir'] != '':
+            filename += COMMON['backup_dir']+'/'
+        # default filename is ip address
+        filename += str(self.ip)
+        if self.model == 'DXS-1210-12SC/A1':
+            filename += '.bin'
+        else:
+            filename += '.cfg'
+
+        if self.model == 'DES-3026':
+            cmd = f'upload configuration {server} {filename}'
+        elif re.search(r'3000|3627G|3120|C1', self.model):
+            cmd = f'upload cfg_toTFTP {server} dest_file {filename}'
+        elif re.search(r'DES|DGS-1210', self.model):
+            cmd = f'upload cfg_toTFTP {server} {filename}'
+        elif self.model in ['DXS-3600-32S', 'DXS-1210-28S']:
+            cmd = f'copy running-config tftp: //{server}/{filename}'
+        elif re.search(r'QSW|DXS-1210-12SC/A2', self.model):
+            cmd = f'copy running-config tftp://{server}/{filename}'
+        elif self.model == 'LTP-8X':
+            cmd = f'copy fs://config tftp://{server}/{filename}'
+        elif self.model == 'DXS-1210-12SC/A1':
+            cmd = f'copy startup-config tftp://{server}/{filename}'
+        elif self.model == 'GP3600-04':
+            cmd = f'copy startup-config tftp: {server}\r{filename}\r'
+
+        # measure backup time
         start = time()
-        result = self.send(template='backup.j2', server=server, path=path)
+        # these models need to save before backup
+        if self.model in ['DXS-1210-12SC/A1', 'LTP-8X', 'GP3600-04']:
+            self.save()
+        raw = self.send(cmd)
         end = time() - start
-        r = r'(^|[ :])[Ss]uccess|finished|complete|Upload configuration.*Done'
-        if re.search(r, result):
+        r = (r'(?i)(^|[ :\n\r])success|'
+             r'finished|complete|Upload configuration.*Done')
+        if re.search(r, raw):
             res = f'backup sent in {end:.2f}s'
             self.log.info(res)
         else:
-            res = {'error': f'backup failed: {result}'}
-            self.log.error(result)
+            res = {'error': f'backup failed: {raw}'}
+            self.log.error(raw)
         return res
 
     @_models(restricted=['S5328C-EI-24S'])
@@ -1936,7 +1965,7 @@ async def batch_async(sw_list, func, external=False, max_workers=1024):
             except Switch.UnavailableError as e:
                 log.warning(e)
             except Exception as e:
-                log.error(f'{e}')
+                log.error(f'[{ip}] {e}')
             else:
                 if external:
                     args = [func, sw]
