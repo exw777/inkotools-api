@@ -5,6 +5,7 @@
 
 import asyncio
 import logging
+import re
 import subprocess
 import time
 from inkotools.lib.db import DB
@@ -46,7 +47,7 @@ def do_backup(sw_list=[]):
     return failed_backup
 
 
-def do_git(failed_backup):
+def do_git(failed_backup=[]):
     git_dir = COMMON['backup_path']
     git_author = COMMON['git_author']
     try:
