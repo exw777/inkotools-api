@@ -1,4 +1,4 @@
-[![Publish Status](https://img.shields.io/github/workflow/status/truman369/inkotools-api/Publish%20to%20Docker%20Hub?label=publish&logo=docker&style=plastic)](https://hub.docker.com/r/truman369/inkotools-api/tags)
+[![Publish Status](https://img.shields.io/github/actions/workflow/status/truman369/inkotools-api/dockerhub.yml?branch=master&label=publish&logo=docker&style=plastic)](https://hub.docker.com/r/truman369/inkotools-api/tags)
 [![Latest Version](https://img.shields.io/docker/v/truman369/inkotools-api?label=latest&logo=github&sort=semver&style=plastic)](https://github.com/truman369/inkotools-api/tags)
 # Inko Tools 
 > Скрипты для упрощения работы с коммутаторами в сети ИНКО
