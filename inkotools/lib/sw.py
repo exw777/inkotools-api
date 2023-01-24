@@ -789,7 +789,7 @@ class Switch:
         elif re.search('1210', self.model):
             rgx = (r'Access ID: (?P<access_id>\d+)\s*'
                    r'Mode: (?P<mode>Permit|Deny)(?:[\s\w:]+)'
-                   rf'Ports: (?P<port>{port})\s*'
+                   rf'Ports: (?P<port>{port})(?:[\s\w:]+)'
                    rf'Source IP *: (?P<ip>{RGX_IP}) *'
                    rf'Source IP Mask *: (?P<mask>{RGX_IP})')
             res = []
