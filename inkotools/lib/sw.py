@@ -630,7 +630,7 @@ class Switch:
                 r'(?P<port>\d{1,2})(?:\s*\((?P<type>C|F)\))?\s+'
                 r'(?P<state>Enabled|Disabled)\s+'
                 r'(?P<speed>Auto|10+\w/(?:Full|Half))/\w+\s+'
-                r'(?P<link>Link ?Down|10+\w/(?:Full|Half)|Err[\w-]+)'
+                r'(?P<link>Link[ -]?Down|10+\w/(?:Full|Half)|Err[\w-]+)'
                 r'(?:/\w+)?\s+'
                 r'(?P<learning>Enabled|Disabled)\s+'
                 r'(?P<autodowngrade>Enabled|Disabled|-)?'
