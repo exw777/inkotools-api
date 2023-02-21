@@ -587,6 +587,7 @@ def switch_get_port_summary(sw_ip: IPv4Address, port_id: int):
     validate_port(sw, port_id)
     result = sw.get_port_state(port_id)
     # set flag to prevent cable cheking if fiber link is up
+    fiber_linkup = False
     for port in result:
         if port['type'] == 'F':
             fiber_linkup = port['link']
