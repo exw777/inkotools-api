@@ -586,9 +586,14 @@ def switch_get_port_summary(sw_ip: IPv4Address, port_id: int):
     sw = get_sw_instance(sw_ip)
     validate_port(sw, port_id)
     result = sw.get_port_state(port_id)
+    # set flag to prevent cable cheking if fiber link is up
+    for port in result:
+        if port['type'] == 'F':
+            fiber_linkup = port['link']
     for port in result:
         # add cable diagnostics for copper ports without link
-        if port['type'] == 'C' and not port['link']:
+        # don't check cable if fiber link is up
+        if port['type'] == 'C' and not fiber_linkup and not port['link']:
             try:
                 cable = sw.check_cable(port_id)
             except Switch.ModelError:
