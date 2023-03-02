@@ -479,7 +479,7 @@ class Switch:
             page_exp = {
                 self._prompt: 'break',
                 conf_t: 'break',
-                '(?i)[^-]all\W': 'a',
+                'All|ALL': 'a',
                 'More': ' ',
                 'Refresh': 'q',
                 '(?i)y/n]:': 'y\r',
