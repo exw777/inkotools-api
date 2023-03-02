@@ -543,9 +543,6 @@ class Switch:
 
         # measure backup time
         start = time()
-        # these models need to save before backup
-        if self.model in ['DXS-1210-12SC/A1', 'LTP-8X', 'GP3600-04']:
-            self.save()
         raw = self.send(cmd)
         end = time() - start
         r = (r'(?i)(^|[ :\n\r])success|'

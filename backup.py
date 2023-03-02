@@ -24,6 +24,13 @@ def is_failed(res):
 
 def backup_and_save(sw):
     try:
+        res = sw.save()
+    except sw.ModelError:
+        pass
+    except Exception as e:
+        sw.log.error(f'Saving exception: {e}')
+
+    try:
         res = sw.backup()
     except sw.ModelError:
         pass
@@ -34,13 +41,6 @@ def backup_and_save(sw):
         if is_failed(res) and is_failed(sw.backup()):
             # add entry to global array
             failed_backup.append(str(sw.ip))
-
-    try:
-        res = sw.save()
-    except sw.ModelError:
-        pass
-    except Exception as e:
-        sw.log.error(f'Saving exception: {e}')
 
 
 def do_backup(sw_list=[]):
