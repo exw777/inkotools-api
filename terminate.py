@@ -186,6 +186,8 @@ def main():
     for sw_ip in MODIFIED:
         # TODO: get sw instance from pool
         sw = Switch(sw_ip)
+        # save
+        sw.save()
         # backup
         sw.backup()
         # commit to git
@@ -200,8 +202,6 @@ def main():
         # message to operlog
         operlog.add_item(
             f'Изменение настроек на {sw_ip} ({sw.location})', msg)
-        # save
-        sw.save()
 
     log.setLevel(logging.INFO)
 
