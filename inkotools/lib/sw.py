@@ -474,6 +474,7 @@ class Switch:
             # Refresh - quit from monitoring
             # [y/n] (ignore case) - saving in cisco cli
             # ]? DXS-3600 confirm tftp backup
+            #    except startup-config for GP3600-04
             # TODO: remove hardcode
             page_exp = {
                 self._prompt: 'break',
@@ -482,13 +483,14 @@ class Switch:
                 'More': ' ',
                 'Refresh': 'q',
                 '(?i)y/n]:': 'y\r',
-                ']\?': '\r',
+                '^(?!.*startup-config).*]\?': '\r',
             }
             cmd_out = ''
             while True:
                 match = tn.expect(list(page_exp.keys()))
                 cmd_out += tn.before
                 send_key = list(page_exp.values())[match]
+                log.debug(f'matched: {list(page_exp.keys())[match]}')
                 if send_key == 'break':
                     break
                 else:
