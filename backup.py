@@ -14,6 +14,9 @@ from inkotools.lib.cfg import COMMON
 
 log = logging.getLogger()
 
+# init global array of failed switches
+failed_backup = []
+
 
 def is_failed(res):
     return isinstance(res, dict) and 'error' in res
@@ -29,6 +32,7 @@ def backup_and_save(sw):
     else:
         # if backup is failed try again one more time
         if is_failed(res) and is_failed(sw.backup()):
+            # add entry to global array
             failed_backup.append(str(sw.ip))
 
     try:
