@@ -41,12 +41,21 @@ GDB_USERS = {}
 
 # TODO: move this part to pool
 # gdb account for common use
-GDB = GRAYDB(COMMON['GRAYDB_URL'], SECRETS['gray_database'])
+try:
+    GDB = GRAYDB(COMMON['GRAYDB_URL'], SECRETS['gray_database'])
+except Exception as e:
+    log.error('Failed to load GrayDB module')
+else:
+    log.info('Started GrayDB module')
 
 # elastic api
-ES = AsyncElasticsearch(
-    COMMON['elastic_api']['url'],
-    api_key=(COMMON['elastic_api']['key_id'], COMMON['elastic_api']['key']))
+try:
+    ES = AsyncElasticsearch(COMMON['elastic_api']['url'], api_key=(
+        COMMON['elastic_api']['key_id'], COMMON['elastic_api']['key']))
+except Exception as e:
+    log.error('Failed to load ElasticSearch module')
+else:
+    log.info('Started ElasticSearch module')
 
 
 def get_sw_instance(sw_ip):
