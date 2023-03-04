@@ -12,6 +12,7 @@ from typing import Optional
 # external imports
 from elasticsearch import AsyncElasticsearch
 from elasticsearch import AuthenticationException as elkAuthError
+from elasticsearch import ConnectionError as elkConnectionError
 from fastapi import FastAPI, HTTPException, Body, Path
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -44,18 +45,14 @@ GDB_USERS = {}
 try:
     GDB = GRAYDB(COMMON['GRAYDB_URL'], SECRETS['gray_database'])
 except Exception as e:
-    log.error('Failed to load GrayDB module')
+    log.critical(f'Failed to load GrayDB module: {e}')
 else:
     log.info('Started GrayDB module')
 
 # elastic api
-try:
-    ES = AsyncElasticsearch(COMMON['elastic_api']['url'], api_key=(
-        COMMON['elastic_api']['key_id'], COMMON['elastic_api']['key']))
-except Exception as e:
-    log.error('Failed to load ElasticSearch module')
-else:
-    log.info('Started ElasticSearch module')
+
+ES = AsyncElasticsearch(COMMON['elastic_api']['url'], api_key=(
+    COMMON['elastic_api']['key_id'], COMMON['elastic_api']['key']))
 
 
 def get_sw_instance(sw_ip):
@@ -184,6 +181,7 @@ async def graydb_creds_exception_handler(request, exc):
 
 
 @app.exception_handler(elkAuthError)
+@app.exception_handler(elkConnectionError)
 async def elk_auth_exception_handler(request, exc):
     """Elastic auth error handler"""
     return JSONResponse(content={"detail": str(exc)}, status_code=500)
@@ -206,6 +204,16 @@ async def sw_model_exception_handler(request, exc):
 async def sw_unavailable_exception_handler(request, exc):
     """Switch unavailable error handler"""
     return JSONResponse(content={"detail": str(exc)}, status_code=503)
+
+
+@app.exception_handler(NameError)
+async def name_error_exception_handler(request, exc):
+    """Custom name error handler"""
+    var_name = exc.args[0].split("'")[1]
+    if var_name == 'GDB':
+        return JSONResponse(content={"detail": "GDB module not loaded"},
+                            status_code=503)
+    raise exc
 
 
 class ArpSearchModel(BaseModel):
