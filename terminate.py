@@ -13,7 +13,7 @@ from inkotools.lib.cfg import COMMON, SECRETS
 from inkotools.lib.gdb import GRAYDB
 
 # https://github.com/truman369/operlog_client
-from operlog_client.cli import operlog
+from operlog_client.client import OperlogClient
 
 log = logging.getLogger()
 
@@ -21,6 +21,9 @@ git_dir = COMMON['backup_path']
 git_author = COMMON['git_author']
 
 GDB = GRAYDB(COMMON['GRAYDB_URL'], SECRETS['gray_database'])
+
+OPERLOG = OperlogClient(COMMON['OPERLOG_URL'], **SECRETS['operlog'],
+                        token_file='.operlog_token')
 
 
 def client_terminate(contract_id: str, ignore_acl=False):
@@ -200,7 +203,7 @@ def main():
         except subprocess.CalledProcessError as e:
             log.error(f'[{sw_ip}] failed to commit: {e}')
         # message to operlog
-        operlog.add_item(
+        OPERLOG.add_item(
             f'Изменение настроек на {sw_ip} ({sw.location})', msg)
 
     log.setLevel(logging.INFO)

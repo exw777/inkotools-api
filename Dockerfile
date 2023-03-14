@@ -8,8 +8,10 @@ RUN apk update && apk add --update-cache \
         gcc \
         libc-dev \
         build-base \
-	libffi-dev \
-        net-snmp-dev && \
+	    libffi-dev \
+        net-snmp-dev \
+        git && \
+    git clone https://github.com/truman369/operlog_client /deps/operlog_client && \
     pip install --no-cache-dir \
         Cython \
         devtools \
