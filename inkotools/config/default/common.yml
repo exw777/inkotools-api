@@ -5,6 +5,9 @@ DB_FILE: switches
 # gray database url
 GRAYDB_URL: https://graydb.inko.tools
 
+# operlog url
+OPERLOG_URL: https://operlog.inko.tools
+
 # relative path on tftp server for backups
 backup_dir: ''
 # host ip (last octet) of tftp server for backups

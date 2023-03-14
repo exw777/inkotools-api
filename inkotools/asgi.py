@@ -24,6 +24,9 @@ from lib.db import DB
 from lib.sw import Switch, ipcalc
 from lib.gdb import GRAYDB
 
+# https://github.com/truman369/operlog_client
+from operlog_client.client import OperlogParser
+
 # module logger
 log = logging.getLogger(__name__)
 
@@ -50,9 +53,11 @@ else:
     log.info('Started GrayDB module')
 
 # elastic api
-
 ES = AsyncElasticsearch(COMMON['elastic_api']['url'], api_key=(
     COMMON['elastic_api']['key_id'], COMMON['elastic_api']['key']))
+
+# operlog parser
+OP_PARSER = OperlogParser(COMMON['OPERLOG_URL'])
 
 
 def get_sw_instance(sw_ip):
@@ -750,3 +755,9 @@ async def switch_get_port_last_log(
     )
     res = fmt_log_search(search)
     return fmt_result(res)
+
+
+@app.get('/operlog')
+async def operlog_get_log(start: int = 0, end: int = 0):
+    data = OP_PARSER.get_items_in_range(start=start, end=end)
+    return fmt_result(data, meta={"entries": len(data)})
