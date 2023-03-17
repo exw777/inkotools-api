@@ -102,6 +102,8 @@ class Switch:
                     raw = self.send('show system infor')
                 elif self.model == 'GP3600-04':
                     raw = self.send(['sh ver', 'sh conf | inc location'])
+                else:
+                    raw = '00-00-00-00-00-00 location:unknown'
 
                 rgx_mac = r'(?P<mac>(?:\w\w[-:]){5}\w\w)'
                 rgx_loc = r'[Ll]ocation *:? *[\'"]?(?P<loc>.*\w)?'
