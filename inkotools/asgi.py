@@ -165,6 +165,12 @@ def validate_port(sw: Switch, port_id: int):
             status_code=422, detail=f'port {port_id} is out of range')
 
 
+def mac_is_valid(mac: str):
+    if re.match(r'^([a-fA-F0-9]{2}[:-]?){5}[a-fA-F0-9]{2}$', mac):
+        return True
+    return False
+
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request, exc):
     """Override validation errors formatting"""
@@ -252,7 +258,7 @@ class ArpSearchModel(BaseModel):
 
     @validator('mac')
     def mac_valid(cls, v):
-        if not re.match(r'^([a-fA-F0-9]{2}[:-]?){5}[a-fA-F0-9]{2}$', v):
+        if not mac_is_valid(v):
             raise ValueError('must be valid MAC address')
         return v
 
@@ -347,12 +353,21 @@ def database_delete_switch(sw_ip: IPv4Address):
             status_code=500, detail=f'failed to remove {sw_ip}')
 
 
+class SwitchModel(BaseModel):
+    mac: Optional[str] = None
+    model: Optional[str] = None
+    location: Optional[str] = None
+
+    @validator('mac')
+    def mac_valid(cls, v):
+        if not mac_is_valid(v):
+            raise ValueError('must be valid MAC address')
+        return v
+
+
 @app.post('/db/sw/{sw_ip}/')
-def database_add_switch(sw_ip: IPv4Address):
-    sw = get_sw_instance(sw_ip)
-    if sw is None:
-        raise HTTPException(
-            status_code=404, detail=f'{sw_ip} is not available')
+def database_add_switch(sw_ip: IPv4Address, sw_args: SwitchModel):
+    sw = Switch(sw_ip, **dict(sw_args))
     result = db.add(sw)
     if result == 0:
         return fmt_result(f'{sw_ip} skipped (no changes)')
