@@ -294,6 +294,7 @@ class Switch:
             'S5328C-EI-24S':    'Login authentication',
             'GP3600-04':        'User Access Verification',
             'QSW-2800-28T-AC':  'in:',
+            'AAM1212-51':       'User name:',
             'unknown':          pexpect.TIMEOUT}
         m = tn.expect(list(matches.values()))
         if m == 1:
@@ -315,7 +316,7 @@ class Switch:
                 self.model += '/C1'
         self.log.debug(f'model: {self.model}')
 
-    @_models(restricted=['S5328C-EI-24S'])  # huawey
+    @_models(restricted=['S5328C-EI-24S', 'AAM1212-51'])  # huawey and zyxel
     def _telnet(self):
         """Connect via telnet and keep connection in returned object"""
 
