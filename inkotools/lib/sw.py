@@ -509,7 +509,7 @@ class Switch:
         self._close_telnet()
         self.log.debug(f'switch object destroyed')
 
-    @_models(restricted=['S5328C-EI-24S', 'GEPON'])
+    @_models(restricted=['S5328C-EI-24S', 'AAM1212-51', 'GEPON'])
     def backup(self):
         """Backup via tftp
 
@@ -558,7 +558,7 @@ class Switch:
             self.log.error(raw)
         return res
 
-    @_models(restricted=['S5328C-EI-24S'])
+    @_models(restricted=['S5328C-EI-24S', 'AAM1212-51'])
     def save(self):
         """Save config
 
