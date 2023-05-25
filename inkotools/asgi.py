@@ -612,10 +612,19 @@ def switch_get_ports_list(sw_ip: IPv4Address):
     return fmt_result(data)
 
 
-@app.get('/sw/{sw_ip}/freeports/')
+@app.get('/sw/{sw_ip}/freeports')
 def switch_get_free_ports_list(sw_ip: IPv4Address):
     sw = get_sw_instance(sw_ip)
     return fmt_result(sw.free_ports())
+
+
+@app.get('/sw/{sw_ip}/accessports')
+def switch_get_access_ports_summary(sw_ip: IPv4Address):
+    sw = get_sw_instance(sw_ip)
+    res = []
+    for p in sw.access_ports:
+        res += switch_get_port_summary(sw_ip, p)['data']
+    return fmt_result(res)
 
 
 @app.get('/sw/{sw_ip}/ports/{port_id}/')
