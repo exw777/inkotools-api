@@ -1714,6 +1714,9 @@ class Switch:
                     f'add multicast_range {profile_id}'),
                    (f'config limited_multicast_addr ports {port} '
                     'access permit state enable')]
+        elif self.model == 'DGS-1210-28X/ME/B1':
+            cmd = (f'config limited_multicast_addr ports {port} '
+                   f'ipv4 add profile_id {profile_id}')
         else:
             cmd = (f'config limited_multicast_addr ports {port} '
                    f'add profile_id {profile_id}')
