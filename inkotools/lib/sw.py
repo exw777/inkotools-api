@@ -1798,8 +1798,8 @@ class Switch:
             self.set_mcast_member(port, False)
 
             if self.model != 'QSW-2800-28T-AC':
-                # remove all multicast filters
-                self.delete_port_mcast_profile(port)
+                # set default multicast filter
+                self.set_port_mcast_profile(port, 1)
 
         # disable port and set description
         self.set_port_state(port, False, desc)
