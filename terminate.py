@@ -35,8 +35,12 @@ def client_terminate(contract_id: str, ignore_acl=False):
     ticket_comment = ''
 
     # check tickets
-    tickets = GDB.search_ticket(contract_id, r'растор\w+',
-                                search_in_comments=True)
+    try:
+        tickets = GDB.search_ticket(contract_id, r'растор\w+',
+                                    search_in_comments=True)
+    except GDB.NotFoundError as e:
+        log.error(e)
+        return
     if len(tickets) == 0:
         log.error(f'[{contract_id}] No termination tickets found. Aborting.')
         return
