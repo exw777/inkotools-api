@@ -1410,7 +1410,7 @@ class Switch:
 
         elif self.model == 'DXS-3600-32S':
             raw = self.send(f'sh int eth 1/0/{port} transceiver')
-            rgx = r'(-?\d+[-+e.\d]*)\s'
+            rgx = r'(-?\d+[-+e.\d]*)(?:\([-+]+\))?\s'
             keys = ['port', 'temperature', 'voltage', 'bias_current',
                             'tx_power', 'rx_power']
             # last two values - power in dbm
