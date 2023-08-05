@@ -41,6 +41,7 @@ RUN apk update && apk add --no-cache \
     adduser --disabled-password -u 1000 -s /bin/sh user
 
 ENV GUNICORN_THREADS=4 \
+    LISTEN_IP="0.0.0.0" \
     LISTEN_PORT=9999 \
     PYTHONPATH="${PYTHONPATH}:/deps"
 
