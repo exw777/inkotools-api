@@ -13,7 +13,7 @@ RUN apk update && apk add --update-cache \
         git && \
     git clone https://github.com/truman369/operlog_client /deps/operlog_client && \
     pip install --no-cache-dir \
-        Cython \
+        Cython==0.29.35 \
         devtools \
         pip \
         setuptools && \
