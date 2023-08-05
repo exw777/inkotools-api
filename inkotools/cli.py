@@ -88,8 +88,14 @@ def update_database():
             # check if unavailable switch is in database
             if db.get(ip) is not None:
                 log.warning(f'{ip} is unavailable')
+        except Exception as e:
+            log.error(f'Failed to create sw instance for {ip}: {e}')
         else:
-            cnt += db.add(sw)
+            try:
+                cnt += db.add(sw)
+            except Exception as e:
+                log.error(f'Failed to add {ip}: {e}')
+
     end = time() - start
     log.info(f'Done in {end:.2f}s, {cnt} items added/updated.')
 
@@ -97,10 +103,13 @@ def update_database():
 def update_aliases():
     """Update aliases for l3 switches"""
     for s in db.search('DXS-3600-32S')['data']:
-        sw = Switch(s['ip'])
-        log.info(f'Adding aliases for {sw.ip}')
-        cnt = db.add_aliases(sw.ip, sw.get_aliases())
-        log.info(f'Done, {cnt} entries added/updated.')
+        try:
+            sw = Switch(s['ip'])
+            log.info(f'Adding aliases for {sw.ip}')
+            cnt = db.add_aliases(sw.ip, sw.get_aliases())
+            log.info(f'Done, {cnt} entries added/updated.')
+        except Exception as e:
+            log.error(f'Failed to get aliases')
 
 
 def migrate_database(version: str):
