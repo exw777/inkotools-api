@@ -36,7 +36,9 @@ RUN apk update && apk add --no-cache \
         busybox-extras \
         proxychains-ng \
         net-snmp-libs \
-        tzdata && \
+        tzdata \
+        git \
+        openssh-client && \
     pip install gunicorn && \
     adduser --disabled-password -u 1000 -s /bin/sh user
 
