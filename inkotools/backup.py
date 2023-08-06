@@ -8,9 +8,9 @@ import logging
 import re
 import subprocess
 import time
-from inkotools.lib.db import DB
-from inkotools.lib.sw import batch_async
-from inkotools.lib.cfg import COMMON
+from lib.db import DB
+from lib.sw import batch_async
+from lib.cfg import COMMON
 
 log = logging.getLogger()
 
