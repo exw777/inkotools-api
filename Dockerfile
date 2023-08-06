@@ -38,6 +38,7 @@ RUN apk update && apk add --no-cache \
         net-snmp-libs \
         tzdata \
         git \
+	diffutils \
         openssh-client && \
     pip install gunicorn && \
     adduser --disabled-password -u 1000 -s /bin/sh user
