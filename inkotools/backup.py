@@ -44,7 +44,6 @@ def backup_and_save(sw):
 
 
 def do_backup(sw_list=[]):
-    failed_backup = []
     asyncio.run(batch_async(sw_list, backup_and_save, external=True))
     if len(failed_backup) > 0:
         log.warning(f'Failed switches: {failed_backup}')
@@ -70,10 +69,15 @@ def do_git(failed_backup=[]):
             if r['ip'] in failed_backup:
                 log.warning(f"Restored {r['file']}")
                 subprocess.run(
-                    (f'git -C {git_dir} restore '
+                    (f'umask 002; git -C {git_dir} restore '
                      f"--staged --worktree {r['file']}"), **params)
             else:
                 log.info(f"Commited {r['file']}")
+        # check again for changes after restoring
+        r = subprocess.run(f'git -C {git_dir} status --short', **params)
+        if r.stdout == '':
+            log.info('No changes - nothing to commit')
+            exit()
         subprocess.run(
             (f'git -C {git_dir} commit '
              f"-m \"Automatic backup at {time.strftime('%F %T')}\" "
