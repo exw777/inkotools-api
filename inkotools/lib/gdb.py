@@ -383,6 +383,39 @@ class GRAYDB:
             log.error(f'[{user}] failed to comment [{contract_id}]')
             return {'error': 'Failed to add comment'}
 
+  @_check_auth
+    def change_ticket_owner(self, contract_id: str, ticket_id: int, comment: str):
+        """Change ticket owner"""
+        ticket_found = False
+        client = self.get_client_data(contract_id)
+        # ticket validation and getting old comments
+        # in graydb we need to add all the old comments with the new one
+        for i in client["tickets"]:
+            if i["ticket_id"] == ticket_id:
+                ticket_found = True
+                old_comments = i["raw_comments"]
+                break
+        if not ticket_found:
+            raise self.NotFoundError('Ticket not found')
+        comment = html.escape(comment)
+        data = {"dopolnenie": "1",
+                "otvetstv": "%CA%F3%EB%E8%E4%E0", // test purpose user name
+                "zakl_zayav2": ticket_id
+                "stadya": old_comments.encode("cp1251"),
+                "dogovor_log": contract_id,
+                "dogovor_log": contract_id,
+                }
+        user = self.credentials['login']
+        log.debug(f'[{user}] contract {contract_id}, ticket {ticket_id}, '
+                  f'comment: {comment}')
+        res = self.browser.post(f'{self.baseurl}/zayavki.php', data=data)
+        if res.ok:
+            log.info(f'[{user}] ticket moved [{contract_id}]')
+            return 'Ticket moved successfully'
+        else:
+            log.error(f'[{user}] failed to move ticket [{contract_id}]')
+            return {'error': 'Failed to move ticket'}
+    
     @_check_auth
     def search_ticket(self, contract_id: str, keywords: list = [],
                       search_in_comments: bool = False,
