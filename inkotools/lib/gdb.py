@@ -410,8 +410,8 @@ class GRAYDB:
                   f'comment: {comment}')
         res = self.browser.post(f'{self.baseurl}/zayavki.php', data=data)
         if res.ok:
-            log.info(f'[{user}] ticket moved [{contract_id}]')
-            return 'Ticket moved successfully'
+            log.info(f'[{user}] ticket owner changed [{contract_id}]')
+            return 'Ticket owner changed successfully'
         else:
             log.error(f'[{user}] failed to move ticket [{contract_id}]')
             return {'error': 'Failed to move ticket'}
