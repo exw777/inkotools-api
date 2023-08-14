@@ -462,6 +462,16 @@ def gdb_add_ticket_comment(contract_id: ContractID, ticket_id: int,
     return fmt_result(res)
 
 
+@app.post('/gdb/{contract_id}/tickets/{ticket_id}/')
+def gdb_change_ticket_owner(contract_id: ContractID, ticket_id: int,
+                           token: str = Body(..., embed=True),
+                           comment: str = Body(..., embed=True)):
+    gdb = get_gdb_instance(token)
+    res = gdb.change_ticket_owner(contract_id=contract_id, ticket_id=ticket_id,
+                          comment=comment)
+    return fmt_result(res)
+
+
 @app.get('/gdb/{contract_id}/')
 def gdb_get_client_by_contract_full(contract_id: ContractID, style: str = ''):
     if style == 'short':
